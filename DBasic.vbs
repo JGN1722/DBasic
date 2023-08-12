@@ -16,10 +16,10 @@ Dim KWList
 KWList = Array(	"IF","THEN","ELSE","ENDIF","WHILE","LOOP","DIM",_
 		"GLOBAL","ENDGLOBAL","MAIN","ENDMAIN","DO","LOOP",_
 		"REPEAT","UNTIL","BREAK","SELECT","CASE","ENDSELECT",_
-		"SUB","ENDSUB","RETURN")
+		"SUB","ENDSUB","RETURN","END")
 Dim KWCode:KWCode=Array("x","i","t","l","e","w","e","d","g","e","m",_
 			"e","p","e","r","e","b","s","c","e","u","e",_
-			"f")
+			"f","E")
 
 '---------------------------------------------------------------------
 '{Variable Declarations}
@@ -553,6 +553,7 @@ Sub Block(L,Ret)
 			Case "b" :DoBreak L
 			Case "$" :InlineAsm
 			Case "f" :DoReturn(Ret)
+			Case "E" :DoEnd
 			Case Else:
 				n = Value
 				Next1
@@ -635,9 +636,9 @@ Sub Factor
 				CallProc(n)
 			Else
 				If IsParam(n) Then
-					LoadParam(ParamNumber(Value))
+					LoadParam(ParamNumber(n))
 				Else
-					LoadVar(Value)
+					LoadVar(n)
 				End If
 			End If
 		ElseIf Token = "#" Then
@@ -949,6 +950,11 @@ Sub DoBreak(L)
 	End If
 End Sub
 
+Sub DoEnd
+	EndProgram
+	Next1
+End Sub
+
 
 '---------------------------------------------------------------------
 '---------------------------------------------------------------------
@@ -1029,7 +1035,6 @@ End Function
 Sub AddParam(n)
 	If IsParam(n) Then Duplicate(n)
 	NumParams = NumParams + 1
-	msgbox "add param: " & n & " , " & NumParams
 	FormalParamST.Add n, NumParams
 End Sub
 
@@ -1229,12 +1234,12 @@ Sub Return
 End Sub
 
 Sub LoadParam(n)
-	Dim Offset:Offset = ((NumParams + 1) * 4) - (n * 4)
+	Dim Offset:Offset = ((NumParams + 2) * 4) - (n * 4)
 	EmitLn("MOV eax, DWORD [ebp + " & Offset & "]")
 End Sub
 
 Sub StoreParam(n)
-	Dim Offset:Offset = ((NumParams + 1) * 4) - (n * 4)
+	Dim Offset:Offset = ((NumParams + 2) * 4) - (n * 4)
 	EmitLn("MOV DWORD [ebp + " & Offset & "], eax")
 End Sub
 
@@ -1248,8 +1253,7 @@ Sub LocAlloc(k)
 	If k > 0 Then
 		EmitLn("MOV ebx, DWORD [esp]")
 		EmitLn("MOV DWORD [esp], 0")
-		EmitLn("ADD esp, 4")	'//optimizable
-		EmitLn("SUB esp, " & k * 4)
+		EmitLn("SUB esp, " & (k - 1) * 4)
 		EmitLn("PUSHD ebx")
 	End If
 End Sub
@@ -1264,4 +1268,8 @@ Sub LocFree(k,L)
 		EmitLn("ADD esp, " & k * 4 + 4)
 		EmitLn("PUSHD ebx")
 	End If
+End Sub
+
+Sub EndProgram
+	EmitLn("invoke ExitProcess,0")
 End Sub
