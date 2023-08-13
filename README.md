@@ -1,2 +1,2 @@
 # DBasic
-That thing is a homemade compiler for a programming language named DBasic. I couldn't install a language that suited my needs due to restrictions on my computer, so I'm writing one, using the windows language VBScript, the only one I have at my disposal.
+This thing is a homemade compiler for a programming language named DBasic. I couldn't install a language that suited my needs due to restrictions on my computer, so I'm writing one, using the windows language VBScript, which is the only one I have at my disposal. Suprisingly, it has proven to be powerful enough to write a full compiler. I've used Jake Crenshaw's book about compiler writing as a tutorial, hence the pascal-like comments
