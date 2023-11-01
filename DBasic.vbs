@@ -7,6 +7,7 @@ Dim ST :Set ST  = CreateObject("Scripting.Dictionary")
 
 Dim FormalParamST:Set FormalParamST = CreateObject("Scripting.Dictionary")
 '<Name> :: Array(<ParamNumber>, <type>, <v|a>, <|len>)
+Dim StringTable:Set StringTable = CreateObject("Scripting.Dictionary")
 Dim NumParams
 
 Dim CharLib,CounterLib,ValueLib,TextLib
@@ -23,8 +24,8 @@ KWList = Array(	"IF","THEN","ELSEIF","ELSE","ENDIF","WHILE","LOOP","DIM",_
 		"REPEAT","UNTIL","BREAK","SELECT","CASE","ENDSELECT",_
 		"SUB","ENDSUB","RETURN","END","GOTO","INT","STR",_
 		"OR","XOR","AND","NOT","CALL","INIT","ENDINIT")
-Dim KWCode:KWCode=Array("x","INT","t","y","l","e","w","e","d","g","e","m",_
-			"e","p","e","r","e","b","STR","c","e","u","e","f",_
+Dim KWCode:KWCode=Array("x","i","t","y","l","e","w","e","d","g","e","m",_
+			"e","p","e","r","e","b","s","c","e","u","e","f",_
 			"E","G","INT","STR","o","X","a","n","C","INT","e")
 
 '---------------------------------------------------------------------
@@ -477,13 +478,15 @@ Sub PreParseLibs
 		Do
 			If CurrentChar = Chr(13) Or CurrentChar = "" Then
 				FileName = Fso.GetParentFolderName(WScript.ScriptFullName) & "\LIBS\" & LibName
-				If Not Fso.GetFile(FileName).Size = 0 Then
-					Set LibFile = Fso.OpenTextFile(FileName)
-					TextLib = LibFile.ReadAll
-					LibFile.Close:Set LibFile = Nothing
-					CounterLib = 1
-					GetCharLib
-					PreParseLib
+				If LibName <> "" Then
+					If Not Fso.GetFile(FileName).Size = 0 Then
+						Set LibFile = Fso.OpenTextFile(FileName)
+						TextLib = LibFile.ReadAll
+						LibFile.Close:Set LibFile = Nothing
+						CounterLib = 1
+						GetCharLib
+						PreParseLib
+					End If
 				End If
 				If CurrentChar = "" Then
 					Exit Do
@@ -897,8 +900,8 @@ Sub Block(L,Ret)
 	Do While Value <> "ELSE" And Token <> "e" And Token <> "c" And Token <> "y"
 		Select Case Token
 			Case ";" :Semi
-			Case "INT" :DoIf L,Ret
-			Case "STR" :DoSelect L,Ret
+			Case "i" :DoIf L,Ret
+			Case "s" :DoSelect L,Ret
 			Case "w" :DoWhile Ret
 			Case "p" :DoLoop Ret
 			Case "r" :DoRepeat Ret
@@ -940,11 +943,11 @@ Sub Semi
 End Sub
 
 Sub DoCall
-	Dim n
 	MatchString("CALL")
-	n = Value
+	If Not InTable(Value) Then Undefined(Value)
+	If GetIdentType(Value) <> "p" Then Abort(n & " is not a subroutine")
+	CallProc(Value)
 	Next1
-	CallProc(n)
 End Sub
 
 Sub CallProc(n)
@@ -1129,6 +1132,11 @@ End Sub
 Sub CompareStringExpression
 	StringExpression
 	StringCompare
+	PopSecondary
+	PushFlags
+	FreeMainReg
+	FreeSecondaryReg
+	PopFlags
 End Sub
 
 Sub CompareExpression
@@ -1148,11 +1156,7 @@ End Sub
 
 Sub Equal
 	NextExpression
-	Push
 	SetEqual
-	Pop
-	FreeMainReg
-	PopFreeStackTop
 End Sub
 
 Sub StringEqual
@@ -1287,12 +1291,17 @@ Sub StringTerm
 		loop
 		MatchString(Chr(34))
 		MatchString(Chr(34))
-		L = NewLabel
-		length = Len(s)
-		s = Replace(s,"'","',39,'")
-		s = Replace(s,VbCrLf,"',13,10,'")
-		EmitLnD(L & " dd " & length)
-		EmitLnD("db '" & s & "',0")
+		If Not StringTable.Exists(s) Then
+			L = NewLabel
+			StringTable.Add s, L
+			length = Len(s)
+			s = Replace(s,"'","',39,'")
+			s = Replace(s,VbCrLf,"',13,10,'")
+			EmitLnD(L & " dd " & length)
+			EmitLnD("db '" & s & "',0")
+		Else
+			L = StringTable.Item(s)
+		End If
 		
 		AllocateHeapBuffer(Len(s)+5)
 		CopyStringToBuf(L)
@@ -1304,11 +1313,16 @@ Sub StringTerm
 		loop
 		MatchString("'")
 		MatchString("'")
-		L = NewLabel
-		length = Len(s)
-		s = Replace(s,VbCrLf,"',13,10,'")
-		EmitLnD(L & " dd " & length)
-		EmitLnD("db '" & s & "',0")
+		If Not StringTable.Exists(s) Then
+			L = NewLabel
+			StringTable.Add s, L
+			length = Len(s)
+			s = Replace(s,VbCrLf,"',13,10,'")
+			EmitLnD(L & " dd " & length)
+			EmitLnD("db '" & s & "',0")
+		Else
+			L = StringTable.Item(s)
+		End If
 		
 		AllocateHeapBuffer(Len(s)+5)
 		CopyStringToBuf(L)
@@ -1325,9 +1339,11 @@ Sub StringTerm
 			ConvertArrayOffset
 			MatchString("]")
 			CopyStringArray n
-		Else
+		ElseIf InTable(n) Or IsParam(n) Then
 			If Not GetDataType(n) = "STR" Then Abort(n & " is not of type STR")
 			CopyStringVar(n)
+		Else
+			Undefined(n)
 		End If
 	Else
 		Expected("String")
@@ -1350,23 +1366,31 @@ End Sub
 '---------------------------------------------------------------------
 '---------------------------------------------------------------------
 Sub DoIf(L,Ret)
-	Dim L1, L2
+	Dim Name,L1,L2,t
 	MatchString("IF")
-	BoolExpression
-	If Value = "THEN" Then MatchString("THEN")
 	L1 = NewLabel
-	L2 = L1
-	BranchFalse(L1)
+	BoolExpression
+	L2 = NewLabel
+	BranchFalse(L2)
 	Block L,Ret
+	Branch(L1)
+	PostLabel(L2)
+	Do While Value = "ELSEIF"
+		MatchString("ELSEIF")
+		BoolExpression
+		L2 = NewLabel
+		BranchFalse(L2)
+		Block L,Ret
+		Branch(L1)
+		PostLabel(L2)
+	Loop
 	If Value = "ELSE" Then
 		MatchString("ELSE")
-		L2 = NewLabel
-		Branch(L2)
-		PostLabel(L1)
 		Block L,Ret
+		Branch(L1)
 	End If
 	MatchString("ENDIF")
-	PostLabel(L2)
+	PostLabel(L1)
 End Sub
 
 Sub DoSelect(L,Ret)
@@ -1378,7 +1402,7 @@ Sub DoSelect(L,Ret)
 		LoadParam(ParamNumber(Name))
 	Else
 		LoadVar(Name)
-	End If
+	End If 
 	Push
 	t = GetDataType(Name)
 	Next1
@@ -1394,7 +1418,9 @@ Sub DoSelect(L,Ret)
 		If t = "STR" Then
 			StringExpression
 			StringCompare
+			PushFlags
 			FreeMainReg
+			PopFlags
 		ElseIf t = "INT" Then
 			Expression
 			CompareTopOfStack
@@ -1460,9 +1486,14 @@ Sub DoBreak(L)
 End Sub
 
 Sub DoEnd
-	EndProgram
-	Next1
+	MatchString("END")
 	MatchString("(")
+	If Token <> ")" Then
+		Expression
+		EndProgram("")
+	Else
+		EndProgram(0)
+	End If
 	MatchString(")")
 End Sub
 
@@ -1533,7 +1564,7 @@ Sub FormalParam
 		t = Value
 		Next1
 	End If
-	AddParam Value,t,"v"
+	AddParam Value,t,"v",0
 	Next1
 End Sub
 
@@ -1626,6 +1657,30 @@ End Sub
 '---------------------------------------------------------------------
 Sub Clear
 	EmitLn("MOV eax, 0")
+End Sub
+
+Sub SecondaryToPrimary
+	EmitLn("MOV eax, ebx")
+End Sub
+
+Sub PrimaryToSecondary
+	EmitLn("MOV ebx, eax")
+End Sub
+
+Sub PopSecondary
+	EmitLn("POP ebx")
+End Sub
+
+Sub PushSecondary
+	EmitLn("PUSH ebx")
+End Sub
+
+Sub PushFlags
+	EmitLn("PUSHFD")
+End Sub
+
+Sub PopFlags
+	EmitLn("POPFD")
 End Sub
 
 Sub SetTrue
@@ -1765,13 +1820,12 @@ Sub StringCompare
 	EmitLn("REPE CMPSB")
 End Sub
 
-Sub PopFreeStackTop
-	EmitLn("invoke HeapFree,[hHeap],0,DWORD [esp]")
-	EmitLn("ADD esp, 4")
-End Sub
-
 Sub FreeMainReg
 	EmitLn("invoke HeapFree,[hHeap],0,eax")
+End Sub
+
+Sub FreeSecondaryReg
+	EmitLn("invoke HeapFree,[hHeap],0,ebx")
 End Sub
 
 Sub CompareTopOfStack
@@ -1854,8 +1908,12 @@ Sub BranchIfFalse(l)
 	EmitLn("JNE " & l)
 End Sub
 
-Sub EndProgram
-	EmitLn("invoke ExitProcess,0")
+Sub EndProgram(val)
+	If val = "" Then
+		EmitLn("invoke ExitProcess,eax")
+	Else
+		EmitLn("invoke ExitProcess," & val)
+	End If
 End Sub
 
 '---------------------------------------------------------------------
@@ -1864,8 +1922,6 @@ End Sub
 '---------------------------------------------------------------------
 '---------------------------------------------------------------------
 Sub JmpToProc(n)
-	If GetIdentType(n) <> "p" Then Abort("The following identifier is" &_
-					" not a subroutine: '" & n & "'")
 	EmitLn("CALL V_" & n)
 End Sub
 
