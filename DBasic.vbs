@@ -705,13 +705,8 @@ Sub WriteMetadata
 	If Value = "METADATA" Then
 		MatchString("METADATA")
 		
-		MatchString("ICON")
-		MatchString(":")
-		icon_name = Value
-		
-		
-		EmitLn("section '.rsrc' resource data readable")
-		EmitLn("directory RT_
+		'...
+		'work in progress
 		
 		MatchString("ENDMETADATA")
 	End If
