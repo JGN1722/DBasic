@@ -1,0 +1,134 @@
+;$SUB CREATENODE() : INT
+V_CREATENODE:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke HeapAlloc,[hHeap],HEAP_ZERO_MEMORY,12
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;what the fuck did I mean ???
+
+;$SUB CREATEPARAMNODE() : INT
+V_CREATEPARAMNODE:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke HeapAlloc,[hHeap],HEAP_ZERO_MEMORY,16
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+
+;
+;
+;//
+;//FIX FIX FIX FIX THIS PIECE OF SHIT UNUSABLE I PASSED THE FUCKER BYREF INSTEAD OF BYVAL
+;//
+;
+;
+;$SUB GETIDENTTYPE(NODE) : STR
+V_GETIDENTTYPE:
+	PUSH ebp
+	MOV ebp, esp
+	
+	MOV eax, DWORD [ebp + 8]
+	MOV eax, DWORD [eax]
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB GETDATATYPE(NODE) : STR
+V_GETDATATYPE:
+	PUSH ebp
+	MOV ebp, esp
+	
+	MOV eax, DWORD [ebp + 8]
+	MOV eax, DWORD [eax + 4]
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB GETADDITIONALINFO(NODE) : STR
+V_GETADDITIONALINFO:
+	PUSH ebp
+	MOV ebp, esp
+	
+	MOV eax, DWORD [ebp + 8]
+	MOV eax, DWORD [eax + 8]
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+
+
+;from here it's ok
+;$SUB PARAMNUMBER(NODE) : INT
+V_PARAMNUMBER:
+	PUSH ebp
+	MOV ebp, esp
+	
+	MOV eax, DWORD [ebp + 8]
+	MOV eax, DWORD [eax + 12]
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB SETIDENTTYPE(NODE,VAL)
+V_SETIDENTTYPE:
+	PUSH ebp
+	MOV ebp, esp
+	
+	MOV eax, DWORD [ebp + 12]
+	MOV ebx, DWORD [ebp + 8]
+	MOV DWORD [eax], ebx
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB SETDATATYPE(NODE,VAL)
+V_SETDATATYPE:
+	PUSH ebp
+	MOV ebp, esp
+	
+	MOV eax, DWORD [ebp + 12]
+	MOV ebx, DWORD [ebp + 8]
+	MOV DWORD [eax + 4], ebx
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB SETADDITIONALINFO(NODE,VAL)
+V_SETADDITIONALINFO:
+	PUSH ebp
+	MOV ebp, esp
+	
+	MOV eax, DWORD [ebp + 12]
+	MOV ebx, DWORD [ebp + 8]
+	MOV DWORD [eax + 8], ebx
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB SETPARAMNUMBER(NODE,VAL)
+V_SETPARAMNUMBER:
+	PUSH ebp
+	MOV ebp, esp
+	
+	MOV eax, DWORD [ebp + 12]
+	MOV ebx, DWORD [ebp + 8]
+	MOV DWORD [eax + 12], ebx
+	
+	MOV esp, ebp
+	POP ebp
+	RET

@@ -1,0 +1,58 @@
+;$SUB READFILE(FILENAME) : STR
+V_READFILE:
+	PUSH ebp
+	MOV ebp, esp
+	SUB esp, 12
+	ADD DWORD [ebp + 8], 4
+	
+	invoke CreateFile,DWORD [ebp + 8],GENERIC_READ,0,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL
+	MOV DWORD [esp], eax
+	
+	invoke GetFileSize,eax,NULL
+	ADD eax, 5
+	MOV DWORD [esp + 4],eax
+	
+	invoke HeapAlloc,[hHeap],HEAP_ZERO_MEMORY,eax
+	MOV edx, DWORD [esp + 4]
+	SUB edx, 5
+	MOV DWORD [eax], edx
+	MOV DWORD [esp + 8], eax
+	
+	MOV eax, DWORD [esp]
+	MOV ebx, DWORD [esp + 8]
+	ADD ebx, 4
+	MOV ecx, DWORD [esp + 4]
+	invoke ReadFile,eax,ebx,ecx,NULL,NULL
+	invoke CloseHandle,DWORD [esp]
+	
+	SUB DWORD [ebp + 8], 4
+	invoke HeapFree,[hHeap], 0, DWORD [ebp + 8]
+	
+	MOV eax, DWORD [esp + 8]
+	
+	ADD esp, 12
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB WRITEFILE(FILENAME,TEXT)
+V_WRITEFILE:
+	PUSH ebp
+	MOV ebp, esp
+	
+	ADD DWORD [ebp + 12], 4
+	ADD DWORD [ebp + 8], 4
+	invoke CreateFileA,DWORD [ebp + 12],GENERIC_WRITE,0,NULL,TRUNCATE_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL
+	MOV ebx, eax
+	MOV edx, DWORD [ebp + 8]
+	invoke WriteFile,eax,DWORD [ebp + 8],DWORD [edx - 4],NULL,NULL
+	invoke CloseHandle,ebx
+	
+	SUB DWORD [ebp + 12], 4
+	SUB DWORD [ebp + 8], 4
+	invoke HeapFree,[hHeap],NULL,DWORD [ebp + 12]
+	invoke HeapFree,[hHeap],NULL,DWORD [ebp + 8]
+	
+	MOV esp, ebp
+	POP ebp
+	RET

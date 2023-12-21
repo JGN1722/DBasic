@@ -1,0 +1,155 @@
+;$SUB DISPLAYCOMMANDLINE()
+V_DISPLAYCOMMANDLINE:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke GetCommandLine
+	invoke MessageBox,0,eax,eax,0
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB GETARGCOUNT() : INT
+V_GETARGCOUNT:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke GetCommandLine
+	MOV ecx, 0
+	
+	.count:
+	CMP BYTE [eax], 0
+	JE .endcount
+	
+	CMP BYTE [eax], 22h ; quote
+	JE .skipoverquoted
+	
+	CMP BYTE [eax], 20h ; space
+	JE .newarg
+	CMP BYTE [eax], 09h ; tab
+	JE .newarg
+	
+	INC eax
+	JMP .count
+	
+	.skipoverquoted:
+	INC eax
+	CMP BYTE [eax], 22h
+	JE @f
+	JMP .skipoverquoted
+	@@:
+	INC eax
+	JMP .count
+	
+	.newarg:
+	INC eax
+	
+	@@:
+	CMP BYTE [eax], 20h
+	JNE @f
+	INC eax
+	JMP @b
+	
+	@@:
+	
+	CMP BYTE [eax], 0
+	JE .endcount
+	
+	INC ecx
+	JMP .count
+	
+	.endcount:
+	INC ecx
+	
+	MOV eax, ecx
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB GETCOMMANDLINEARGUMENT(INDEX) : STR
+V_GETCOMMANDLINEARGUMENT:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke GetCommandLine
+	MOV ecx, DWORD [ebp + 8]
+	
+	.count:
+	CMP ecx, 0
+	JE .argument_found
+	
+	CMP BYTE [eax], 22h ; quote
+	JE .skipoverquoted
+	
+	CMP BYTE [eax], 20h ; space
+	JE .newarg
+	CMP BYTE [eax], 09h ; tab
+	JE .newarg
+	
+	INC eax
+	JMP .count
+	
+	.skipoverquoted:
+	INC eax
+	CMP BYTE [eax], 22h
+	JE @f
+	JMP .skipoverquoted
+	@@:
+	INC eax
+	JMP .count
+	
+	.newarg:
+	INC eax
+	
+	@@:
+	CMP BYTE [eax], 20h
+	JNE @f
+	INC eax
+	JMP @b
+	@@:
+	DEC ecx
+	JMP .count
+	
+	.argument_found:
+	
+	PUSH eax
+	INC ecx
+	
+	CMP BYTE [eax], 22h
+	JE .quoted
+	
+	@@:
+	INC eax
+	CMP BYTE [eax], 20h
+	JE .copy_in_buffer
+	CMP BYTE [eax], 0
+	JE .copy_in_buffer
+	INC ecx
+	JMP @b
+	
+	.quoted:
+	INC eax
+	INC DWORD [esp]
+	@@:
+	INC eax
+	CMP BYTE [eax], 22h
+	JE .copy_in_buffer
+	INC ecx
+	JMP @b
+	
+	.copy_in_buffer:
+	PUSH ecx
+	ADD ecx, 5
+	invoke HeapAlloc,[hHeap],HEAP_ZERO_MEMORY,ecx
+	POP ecx
+	MOV DWORD [eax], ecx
+	MOV edi, eax
+	ADD edi, 4
+	MOV esi, DWORD [esp]
+	REP MOVSB
+	
+	MOV esp, ebp
+	POP ebp
+	RET

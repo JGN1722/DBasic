@@ -1,0 +1,17 @@
+\A simple template program that demonstrates how to open a window\
+Main
+	Dim WindowID, Event
+	WindowID = OpenWindow(100,100,300,600,"Template program",@WindowCallback)
+	Repeat
+		Event = HandleWindowEvents()
+	Until Event = 0
+EndMain
+
+Sub WindowCallback(lparam,wparam,wmsg,hwnd) (stdcall)
+	Select wmsg
+		Case wm_destroy
+			PostQuitMessage(0)
+		Case Else
+			return(DefaultMessageHandling(lparam,wparam,wmsg,hwnd))
+	EndSelect
+EndSub

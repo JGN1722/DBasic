@@ -1,0 +1,16 @@
+SYSTEMTIME dd 4
+
+;$SUB RANDOM() : INT
+V_RANDOM:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke GetSystemTime,SYSTEMTIME
+	MOV ebx, SYSTEMTIME
+	ADD ebx, 14
+	XOR eax, eax
+	MOV ax, WORD [ebx]
+	
+	MOV esp, ebp
+	POP ebp
+	RET

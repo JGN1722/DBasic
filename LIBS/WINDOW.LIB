@@ -1,0 +1,314 @@
+;$CONST WM_CREATE = 1
+;$CONST WM_DESTROY = 2
+;$CONST WM_SIZE = 5
+;$CONST WM_QUIT = 18
+;$CONST WM_COMMAND = 273
+;$CONST WM_HOTKEY = 786
+
+;$CONST EN_UPDATE = 1024
+
+;$CONST MOD_ALT = 1
+;$CONST MOD_CTRL = 2
+;$CONST MOD_SHIFT = 4
+;$CONST MOD_WIN = 8
+
+;$CONST KEY_A = 65
+;$CONST KEY_B = 66
+;$CONST KEY_C = 67
+;$CONST KEY_D = 68
+;$CONST KEY_E = 69
+;$CONST KEY_F = 70
+;$CONST KEY_G = 71
+;$CONST KEY_H = 72
+;$CONST KEY_I = 73
+;$CONST KEY_J = 74
+;$CONST KEY_K = 75
+;$CONST KEY_L = 76
+;$CONST KEY_M = 77
+;$CONST KEY_N = 78
+;$CONST KEY_O = 79
+;$CONST KEY_P = 80
+;$CONST KEY_Q = 81
+;$CONST KEY_R = 82
+;$CONST KEY_S = 83
+;$CONST KEY_T = 84
+;$CONST KEY_U = 85
+;$CONST KEY_V = 86
+;$CONST KEY_W = 87
+;$CONST KEY_X = 88
+;$CONST KEY_Y = 89
+;$CONST KEY_Z = 90
+
+window_class db 'WNDCLASS',0
+edit_class db 'EDIT',0
+msg MSG
+
+;$SUB OPENWINDOW(X,Y,WIDTH,HEIGHT,TITLE,CALLBACK_PROC)
+V_OPENWINDOW:
+	PUSH ebp
+	MOV ebp, esp
+	
+	ADD DWORD [ebp + 12], 4
+	
+	invoke HeapAlloc, [hHeap], HEAP_ZERO_MEMORY, 40
+	MOV edi, eax
+	invoke GetModuleHandle, 0
+	MOV DWORD [edi + 16], eax
+	MOV eax, DWORD [ebp + 8]
+	MOV DWORD [edi + 4], eax
+	MOV DWORD [edi + 28], COLOR_BTNFACE+1
+	MOV DWORD [edi + 36], window_class
+	invoke RegisterClass, edi
+	invoke CreateWindowEx,0,window_class,DWORD [ebp + 12],WS_VISIBLE+WS_OVERLAPPEDWINDOW,DWORD [ebp + 28], DWORD [ebp + 24], DWORD [ebp + 16], DWORD [ebp + 20],NULL,NULL,DWORD [edi + 16],NULL
+	
+	PUSH eax
+	SUB DWORD [ebp + 12], 4
+	invoke HeapFree,[hHeap],0,DWORD [ebp + 12]
+	invoke HeapFree,[hHeap],0,edi
+	POP eax
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB HANDLEWINDOWEVENTS()
+V_HANDLEWINDOWEVENTS:
+	invoke GetMessage,msg,NULL,0,0
+	PUSH eax
+	CMP eax, 1
+	JNE .finish
+	invoke TranslateMessage,msg
+	invoke DispatchMessage,msg
+	.finish:
+	POP eax
+	RET
+
+;$SUB POSTQUITMESSAGE(CODE)
+V_POSTQUITMESSAGE:
+	invoke PostQuitMessage,DWORD [ebp + 8]
+	RET
+
+;$SUB DEFAULTMESSAGEHANDLING(HWND,WMSG,WPARAM,LPARAM)
+V_DEFAULTMESSAGEHANDLING:
+	invoke DefWindowProc,DWORD [ebp + 8], DWORD [ebp + 12], DWORD [ebp + 16], DWORD [ebp + 20]
+	RET
+
+;$SUB CREATEEDIT(WINDOWID,X,Y,WIDTH,LENGHT) : INT
+V_CREATEEDIT:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke GetModuleHandle,0
+	invoke CreateWindowEx,WS_EX_CLIENTEDGE,edit_class,0,WS_VISIBLE+WS_CHILD+WS_HSCROLL+WS_VSCROLL+ES_AUTOHSCROLL+ES_AUTOVSCROLL+ES_MULTILINE,DWORD[ebp + 20],DWORD[ebp + 16],DWORD[ebp + 8],DWORD[ebp + 12],DWORD[ebp + 24],0,eax,NULL
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB CLEARTEXT(CONTROLID)
+V_CLEARTEXT:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke SendMessage,DWORD [ebp + 8],WM_SETTEXT,0,0
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB RESIZECOMPONENT(WINDOWID,X,Y,WIDTH,LENGHT)
+V_RESIZECOMPONENT:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke SetWindowPos,DWORD [ebp + 24], NULL, DWORD [ebp + 20], DWORD [ebp + 16], DWORD [ebp + 12], DWORD [ebp + 8], NULL
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB WINDOWWIDTH(WINDOWID) : INT
+V_WINDOWWIDTH:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke HeapAlloc,[hHeap],HEAP_ZERO_MEMORY,16
+	MOV ebx, eax
+	invoke GetWindowRect,DWORD [ebp + 8], ebx
+	MOV eax, DWORD [ebx + 8]
+	SUB eax, DWORD [ebx]
+	PUSH eax
+	invoke HeapFree,[hHeap],0,ebx
+	POP eax
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB WINDOWHEIGHT(WINDOWID) : INT
+V_WINDOWHEIGHT:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke HeapAlloc,[hHeap],HEAP_ZERO_MEMORY,16
+	MOV ebx, eax
+	invoke GetWindowRect,DWORD [ebp + 8], ebx
+	MOV eax, DWORD [ebx + 12]
+	SUB eax, DWORD [ebx + 4]
+	PUSH eax
+	invoke HeapFree,[hHeap],0,ebx
+	POP eax
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB CREATEMENU(WINDOWID) : INT
+V_CREATEMENU:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke CreateMenu
+	PUSH eax
+	invoke SetMenu,DWORD [ebp + 8], eax
+	POP eax
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB CREATESUBMENU() : INT
+V_CREATESUBMENU:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke CreateMenu
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB APPENDMENU(WINDOWID,MENUID,SUBMENUID,STRING)
+V_APPENDMENU:
+	PUSH ebp
+	MOV ebp, esp
+	
+	ADD DWORD [ebp + 8], 4
+	invoke AppendMenu,DWORD [ebp + 16],MF_POPUP,DWORD [ebp + 12], DWORD [ebp + 8]
+	
+	PUSH eax
+	SUB DWORD [ebp + 8], 4
+	invoke HeapFree,[hHeap],0,DWORD [ebp + 8]
+	invoke DrawMenuBar,DWORD [ebp + 20]
+	POP eax
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB APPENDMENUITEM(SUBMENUID,ITEMID,STRING)
+V_APPENDMENUITEM:
+	PUSH ebp
+	MOV ebp, esp
+	
+	ADD DWORD [ebp + 8], 4
+	invoke AppendMenu,DWORD [ebp + 16],MF_STRING,DWORD [ebp + 12],DWORD [ebp + 8]
+	SUB DWORD [ebp + 8], 4
+	invoke HeapFree,[hHeap],0,DWORD [ebp + 8]
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB APPENDMENUSEPARATOR(SUBMENUID)
+V_APPENDMENUSEPARATOR:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke AppendMenu,DWORD [ebp + 8],MF_SEPARATOR,NULL,NULL
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB KEYBOARDSHORTCUT(WINDOWID,SHORTCUTID,MODIFIER_KEY,KEY)
+V_KEYBOARDSHORTCUT:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke RegisterHotKey,DWORD [ebp + 20],DWORD [ebp + 16],DWORD [ebp + 12],DWORD [ebp + 8]
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB SELECTTEXT(CONTROLID,STARTING,ENDING)
+V_SELECTTEXT:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke SendMessage,DWORD[ebp + 16],EM_SETSEL,DWORD[ebp + 12],DWORD[ebp + 8]
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB GETTEXTLENGTH(CONTROLID)
+V_GETTEXTLENGTH:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke GetWindowTextLength,DWORD [ebp + 8]
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB SETWINDOWTITLE(WINDOWID,TITLE)
+;$SUB SETCOMPONENTTEXT(ID,TEXT)
+V_SETWINDOWTITLE:
+V_SETCOMPONENTTEXT:
+	PUSH ebp
+	MOV ebp, esp
+	
+	ADD DWORD [ebp + 8], 4
+	invoke SetWindowText,DWORD [ebp + 12],DWORD [ebp + 8]
+	SUB DWORD [ebp + 8], 4
+	invoke HeapFree,[hHeap],HEAP_ZERO_MEMORY,DWORD [ebp + 8]
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+db 'GETCOMPONENTTEXT',0
+;$SUB GETCOMPONENTTEXT(ID) : STR
+V_GETCOMPONENTTEXT:
+	PUSH ebp
+	MOV ebp, esp	
+	
+	invoke GetWindowTextLength,DWORD [ebp + 8]
+	PUSH eax
+	ADD eax, 5
+	invoke HeapAlloc,[hHeap],HEAP_ZERO_MEMORY,eax
+	POP ecx
+	MOV DWORD [eax], ecx
+	PUSH eax
+	ADD eax, 4
+	INC ecx
+	invoke GetWindowText,DWORD [ebp + 8],eax,ecx
+	POP eax
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB GETACTIVEWINDOW() : INT
+V_GETACTIVEWINDOW:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke GetForegroundWindow
+	
+	MOV esp, ebp
+	POP ebp
+	RET

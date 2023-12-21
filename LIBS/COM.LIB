@@ -1,0 +1,14 @@
+;$SUB INITCOM()
+V_INITCOM:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke CoInitialize,NULL
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB CREATEOBJECT(NAME) : INT
+V_CREATEOBJECT:
+	invoke CoCreateInstance,[ebp + 8],NULL,CLSCTX_INPROC_SERVER,

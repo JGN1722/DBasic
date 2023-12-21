@@ -1,0 +1,151 @@
+;$SUB GETCHARAT(STRING,INDEX) : STR
+V_GETCHARAT:
+	PUSH ebp
+	MOV ebp, esp
+	
+	MOV ebx, DWORD [ebp + 8]
+	MOV esi, DWORD [ebp + 12]
+	CMP ebx, DWORD [esi]
+	JA .null
+	ADD esi, ebx
+	ADD esi, 4
+	CMP BYTE [esi], 0
+	JE .null
+	invoke HeapAlloc,[hHeap],HEAP_ZERO_MEMORY,6
+	MOV DWORD [eax], 1
+	MOV BYTE [eax + 5], 0
+	MOV bl, BYTE [esi]
+	MOV BYTE [eax + 4], bl
+	JMP @f
+	.null:
+	invoke HeapAlloc,[hHeap],HEAP_ZERO_MEMORY,5
+	
+	@@:
+	PUSHD eax
+	invoke HeapFree,[hHeap],0,DWORD [ebp + 12]
+	POPD eax
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB ASC(CHAR) : INT
+V_ASC:
+	PUSH ebp
+	MOV ebp, esp
+	
+	MOV esi, DWORD [ebp + 8]
+	ADD esi, 4
+	MOVZX eax, BYTE [esi]
+	PUSHD eax
+	invoke HeapFree,[hHeap],0,DWORD [ebp + 8]
+	POPD eax
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB CHR(CODE) : STR
+V_CHR:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke HeapAlloc,[hHeap],HEAP_ZERO_MEMORY,6
+	MOV DWORD [eax], 1
+	MOV ebx, DWORD [ebp + 8]
+	MOV BYTE [eax + 4], bl
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB UCASE(STRING) : STR
+V_UCASE:
+	PUSH ebp
+	MOV ebp, esp
+	
+	MOV eax, DWORD [ebp + 8]
+	MOV esi, eax
+	ADD esi, 3
+	.BeginLoop:
+	INC esi
+	CMP BYTE [esi], 0
+	JE .EndLoop
+	CMP BYTE [esi], 97
+	JB .BeginLoop
+	CMP BYTE [esi], 122
+	JA .BeginLoop
+	SUB BYTE [esi], 32
+	JMP .BeginLoop
+	.EndLoop:
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB LCASE(STRING) : STR
+V_LCASE:
+	PUSH ebp
+	MOV ebp, esp
+	
+	MOV eax, DWORD [ebp + 8]
+	MOV esi, eax
+	ADD esi, 3
+	.BeginLoop:
+	INC esi
+	CMP BYTE [esi], 0
+	JE .EndLoop
+	CMP BYTE [esi], 65
+	JB .BeginLoop
+	CMP BYTE [esi], 90
+	JA .BeginLoop
+	ADD BYTE [esi], 32
+	JMP .BeginLoop
+	.EndLoop:
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB LEN(STRING) : INT
+V_LEN:
+	PUSH ebp
+	MOV ebp, esp
+	
+	MOV eax, DWORD [ebp + 8]
+	MOV eax, DWORD [eax]
+	PUSH eax
+	invoke HeapFree,[hHeap],0,DWORD [ebp + 8]
+	POP eax
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB REPLACE(STRING,REPLACED,NEWCHAR) : INT
+V_REPLACE:
+	PUSH ebp
+	MOV ebp, esp
+	
+	MOV esi, DWORD [ebp + 16]
+	ADD esi, 4
+	MOV eax, DWORD [ebp + 12]
+	MOV al, BYTE [eax + 4]
+	
+	MOV ecx, DWORD [ebp + 12]
+	MOV ecx, DWORD [ecx]
+	PUSH ecx
+	
+	MOV edi, esp
+	
+	@@:
+	;CMP BYTE [esi], al
+	;jne @f
+	
+	@@:
+	;PUSH BYTE [esi]
+	INC esi
+	
+	
+	MOV esp, ebp
+	POP ebp
+	RET

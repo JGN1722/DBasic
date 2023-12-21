@@ -1,0 +1,58 @@
+;$SUB REDIM(ARRAY_PTR,NEW_SIZE)
+V_REDIM:
+	PUSH ebp
+	MOV ebp, esp
+	
+	MOV ebx, DWORD [ebp + 12]
+	INC DWORD [ebp + 8]
+	SHL DWORD [ebp + 8], 2
+	invoke HeapReAlloc,[hHeap],HEAP_ZERO_MEMORY,DWORD [ebx],DWORD [ebp + 8]
+	
+	MOV DWORD [ebx], eax
+	MOV ebx, DWORD [ebp + 8]
+	MOV DWORD [eax], ebx
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB REDIM§(ARRAY_PTR,NEW_SIZE)
+V_REDIM$:
+	PUSH ebp
+	MOV ebp, esp
+	
+	
+	MOV ebx, DWORD [ebp + 12]
+	
+	MOV ecx, DWORD [ebx]
+	MOV ecx, DWORD [ecx]
+	CMP ecx, DWORD [ebp + 8]
+	JBE .above
+	
+	SUB ecx, DWORD [ebp + 8]
+	MOV esi, DWORD [ebx]
+	MOV eax, DWORD [esi]
+	SHL eax, 2
+	ADD esi, eax
+	;there I am
+	@@:
+	PUSH ecx
+	
+	invoke HeapFree,[hHeap],0,DWORD [esi]
+	ADD esi, 4
+	
+	POP ecx
+	LOOP @b
+	
+	.above:
+	INC DWORD [ebp + 8]
+	SHL DWORD [ebp + 8], 2
+	invoke HeapReAlloc,[hHeap],HEAP_ZERO_MEMORY,DWORD [ebx],DWORD [ebp + 8]
+	
+	MOV DWORD [ebx], eax
+	MOV ebx, DWORD [ebp + 8]
+	MOV DWORD [eax], ebx
+	
+	MOV esp, ebp
+	POP ebp
+	RET

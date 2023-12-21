@@ -1,0 +1,24 @@
+;$SUB CINT(STRING) : INT
+V_CINT:
+	PUSH ebp
+	MOV ebp, esp
+	
+	MOV esi, DWORD [ebp + 8]
+	MOV ecx,DWORD [esi]
+	XOR eax,eax
+	ADD esi, 4
+        @@:
+	MOVZX ebx, BYTE [esi]
+	INC esi
+	IMUL eax,10
+	SUB ebx,'0'
+	ADD eax,ebx
+	LOOP @b
+	
+	PUSH eax
+	invoke HeapFree,[hHeap],HEAP_ZERO_MEMORY,DWORD [ebp + 8]
+	POP eax
+	 
+	MOV esp, ebp
+	POP ebp
+	RET

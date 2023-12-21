@@ -1,0 +1,129 @@
+Global
+	Dim WindowID, EditID, MenuID
+	Dim FileMenuID, HelpMenuID, EditMenuID, CommandMenuID
+	
+	Dim STR FileName, INT Existing?, INT Modified?
+EndGlobal
+
+Enumeration
+	MenuSave
+	MenuExit
+	MenuFind
+	MenuReplace
+	MenuAbout
+EndEnumeration
+
+Enumeration
+	HotKeyCtrlA
+	HotKeyCtrlW
+	HotKeyCtrlS
+EndEnumeration
+
+Main
+	Dim Event, test
+	
+	If GetArgCount() = 1 Then
+		FileName = "New File"
+		Existing? = False
+	Else
+		FileName = GetCommandLineArgument(1)
+		Existing? = True
+	EndIf
+	
+	Modified? = False
+	
+	WindowID = OpenWindow(100,100,300,600,FileName,@WindowCallback)
+	
+	EditID = CreateEdit(WindowID,0,0,240,585)
+	If Existing? Then
+		SetComponentText(EditID,ReadFile(FileName))
+	EndIf
+	
+	MenuID = CreateMenu(WindowID)
+	
+	FileMenuID = CreateSubMenu()
+	AppendMenuItem(FileMenuID,MenuSave,"Save")
+	AppendMenuSeparator(FileMenuID)
+	AppendMenuItem(FileMenuID,MenuExit,"Exit")
+	
+	AppendMenu(WindowID,MenuID,FileMenuID,"File")
+	
+	EditMenuID = CreateSubMenu()
+	AppendMenuItem(EditMenuID,MenuFind,"Find")
+	AppendMenuItem(EditMenuID,MenuReplace,"Replace")
+	
+	AppendMenu(WindowID,MenuID,EditMenuID,"Edit")
+		
+	CommandMenuID = CreateSubMenu()
+	AppendMenu(WindowID,MenuID,CommandMenuID,"Commands")
+	
+	HelpMenuID = CreateSubMenu()
+	AppendMenuItem(HelpMenuID,MenuAbout,"About...")
+	
+	AppendMenu(WindowID,MenuID,HelpMenuID,"Help")
+	
+	KeyboardShortcut(WindowID,HotkeyCtrlA,MOD_CTRL,KEY_A)
+	KeyboardShortcut(WindowID,HotkeyCtrlW,MOD_CTRL,KEY_W)
+	KeyboardShortcut(WindowID,HotkeyCtrlS,MOD_CTRL,KEY_S)
+	
+	Repeat
+		Event = HandleWindowEvents()
+	Until Event = 0
+	
+	CloseApplication()
+EndMain
+
+Sub CloseApplication()
+	If Modified? Then
+		If MsgBox("This file has been modified. Do you want to save it ?","Warning",msgbox_warning+msgbox_yesno) = msgboxbutton_yes Then
+			SaveFile()
+		EndIf
+	EndIf
+	End()
+EndSub
+
+Sub SaveFile()
+	If !Existing? Then
+		MsgBox("This file does not exist","error",msgbox_error)
+	Else
+		WriteFile(FileName,GetComponentText(EditID))
+		SetWindowTitle(WindowID,FileName)
+		Modified? = False
+	EndIf
+EndSub
+
+Sub WindowCallback(lparam,wparam,wmsg,hwnd) (stdcall)
+	Select wmsg
+		Case wm_destroy
+			PostQuitMessage(0)
+		Case wm_size
+			ResizeComponent(EditID, 0, 0, WindowWidth(WindowID) - 15, WindowHeight(WindowID) - 60)
+		Case wm_command
+			Select wparam
+				Case MenuSave
+					SaveFile()
+				Case MenuExit
+					CloseApplication()
+				Case MenuAbout
+					msgbox("This is a Win32 notepad created with DBasic","About Minipad",msgbox_information)
+				Case EN_UPDATE * 65536 \EN_UPDATE is stored in the high word of the wparam\
+					If !Modified? Then
+						Modified? = True
+						SetWindowTitle(WindowID,"*" & FileName)
+					EndIf
+			EndSelect
+		Case wm_hotkey
+			If GetActiveWindow() = hwnd Then
+				Select wparam
+					Case HotkeyCtrlA
+						SelectText(EditID,0,GetTextLength(EditID))
+					Case HotkeyCtrlW
+						CloseApplication()
+					Case HotKeyCtrlS
+						SaveFile()
+				EndSelect
+			EndIf
+		Case Else
+			return(DefaultMessageHandling(lparam,wparam,wmsg,hwnd))
+	EndSelect
+EndSub

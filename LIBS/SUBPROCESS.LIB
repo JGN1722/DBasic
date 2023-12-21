@@ -1,0 +1,42 @@
+startup_info	dd 69
+		dd 0
+		dd 0
+		dd 0
+		dd 0
+		dd 0
+		dd 0
+		dd 0
+               dd 0
+               dd 0
+               dd 0
+               dd 0
+               dd 0
+               dd 0
+               db 0
+               dd 0
+		dd 0
+		dd 0
+  process_info dd 0
+               dd 0
+               dd 0
+               dd 0
+
+;$SUB RUN(APPLICATION,COMMAND_LINE)
+V_RUN:
+	PUSH ebp
+	MOV ebp, esp
+	
+	ADD DWORD [ebp + 8], 4
+	ADD DWORD [ebp + 12], 4
+	MOV DWORD [startup_info], 72
+	
+	invoke CreateProcessA,DWORD [ebp + 12],DWORD [ebp + 8],0,0,0,0,0,0,startup_info,process_info
+	
+	SUB DWORD [ebp + 8], 4
+	SUB DWORD [ebp + 12], 4
+	invoke HeapFree,[hHeap],0,DWORD [ebp + 8]
+	invoke HeapFree,[hHeap],0,DWORD [ebp + 12]
+	
+	MOV esp, ebp
+	POP ebp
+	RET
