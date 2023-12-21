@@ -3,10 +3,10 @@ Option Explicit
 Dim Shell:Set Shell = CreateObject("WScript.Shell")
 Dim Fso:Set Fso = CreateObject("Scripting.FileSystemObject")
 Dim ST :Set ST  = CreateObject("Scripting.Dictionary")
-'<LabelName> :: Array(<p|v|a>, <returntype|type|type>, <argnumber||len>)
+'<LabelName> :: Array(<p|v|a>, <returntype|type|type>, <argnumber|initialized|len>)
 
 Dim FormalParamST:Set FormalParamST = CreateObject("Scripting.Dictionary")
-'<Name> :: Array(<ParamNumber>, <type>, <v|a>, <|len>)
+'<Name> :: Array(<ParamNumber>, <type>, <v|a>, <initialized|len>)
 Dim StringTable:Set StringTable = CreateObject("Scripting.Dictionary")
 Dim NumParams
 
@@ -15,6 +15,8 @@ Dim CharLib,CounterLib,ValueLib,TextLib
 Dim ErrLn
 Dim DebugMode
 Dim PassNumber
+
+Dim HeapBuffers
 
 '---------------------------------------------------------------------
 'Definition Of Keywords And Token Types
@@ -26,14 +28,14 @@ KWList = Array(	"IF","THEN","ELSEIF","ELSE","ENDIF","WHILE","LOOP","DIM",_
 		"OR","XOR","AND","NOT","CALL","INIT","ENDINIT")
 Dim KWCode:KWCode=Array("x","i","t","y","l","e","w","e","d","g","e","m",_
 			"e","p","e","r","e","b","s","c","e","u","e","f",_
-			"E","G","INT","STR","o","X","a","n","C","INT","e")
+			"E","G","INT","STR","o","X","a","n","C","init","e")
 
 '---------------------------------------------------------------------
 'Constants Declarations
 Dim Constants:Set Constants = CreateObject("Scripting.Dictionary")
-Constants.Add "TRUE", -1
-Constants.Add "FALSE", 0
-Constants.Add "MEANING_OF_LIFE", 42
+Constants.Add "TRUE", Array("INT",-1)
+Constants.Add "FALSE", Array("INT",0)
+Constants.Add "MEANING_OF_LIFE", Array("INT",42)
 
 '---------------------------------------------------------------------
 'Variable Declarations
@@ -114,7 +116,7 @@ End Sub
 Sub Assemble
 	Dim CommandLine,OutFileName,CurrentPath,StdErrResult
 	CurrentPath = Fso.GetParentFolderName(WScript.ScriptFullName)
-	If Mid(WScript.Arguments.Item(0),2,1) =":" Then
+	If Mid(WScript.Arguments.Item(0),2,1) = ":" Then
 		CommandLine = CurrentPath & "\fasm\FAsm.exe " & CurrentPath & "\output.asm " & Left(WScript.Arguments.Item(0),InStr(WScript.Arguments.Item(0),".") - 1) & ".exe"
 	Else
 		CommandLine = CurrentPath & "\fasm\FAsm.exe " & CurrentPath & "\output.asm " & Shell.CurrentDirectory & "\" & Left(WScript.Arguments.Item(0),InStr(WScript.Arguments.Item(0),".") - 1) & ".exe"
@@ -153,7 +155,7 @@ Sub Abort(s)
 End Sub
 
 Sub Expected(s)
-	Abort("'" & s & "' Expected (Instead Of '" & Value & "')")
+	Abort("'" & s & "' expected (instead of '" & Value & "')")
 End Sub
 
 Sub Undefined(n)
@@ -169,7 +171,7 @@ Function IsAlpha(c)
 		IsAlpha = False
 		Exit Function
 	End If
-	If InStr("ABCDEFGHIJKLMNOPQRSTUVWXYZ_?",UCase(c)) Then
+	If InStr("ABCDEFGHIJKLMNOPQRSTUVWXYZ_?§",UCase(c)) Then
 		IsAlpha = True
 	Else
 		IsAlpha = False
@@ -245,32 +247,17 @@ End Function
 
 Sub SkipWhite
 	If PassNumber = 2 Then
-		Do While IsWhite(Look) Or Look = "\"
-			If Look = "\" Then SkipComments
+		Do While IsWhite(Look)
 			If Look = Chr(10) Then : ErrLn = ErrLn + 1 : End If
 			GetChar
 		Loop
 	Else
-		Do While IsWhite(Look) Or Look = "\" Or Look = Chr(34) Or Look = "'"
-			If Look = "\" Then SkipComments
+		Do While IsWhite(Look) Or Look = Chr(34) Or Look = "'"
 			If Look = Chr(34) Or Look = "'" Then SkipString(Look)
 			If Look = Chr(10) Then : ErrLn = ErrLn + 1 : End If
 			GetChar
 		Loop
 	End If
-End Sub
-
-Sub SkipComments
-	Do
-		GetChar
-		If Look = "\" Then
-			Exit Do
-		End If
-		If Look = "" Then
-			Abort("Unmatched '\'")
-			Exit Do
-		End If
-	Loop
 End Sub
 
 Sub SkipString(terminator_type)
@@ -287,16 +274,15 @@ Sub SkipString(terminator_type)
 End Sub
 
 Function Lookup(table,s,n)
-	Dim i:i=n
-	Dim found:found = false
-	Do While (i >= 0) And Not Found
-		If s = table(i) Then
+	Dim found:found = False
+	Do While (n >= 0) And Not Found
+		If s = table(n) Then
 			Found = True
 		Else
-			i = i - 1
+			n = n - 1
 		End If
 	Loop
-	Lookup = i
+	Lookup = n
 End Function
 
 Function InTable(n)
@@ -347,24 +333,30 @@ Sub GetOp
 	GetChar
 End Sub
 
+Sub GetComment
+	Token = "\"
+	Value = ""
+	GetChar
+	Do While Look <> "\"
+		Value = Value & Look
+		GetChar
+	Loop
+	GetChar
+End Sub
+
 Sub Next1
 	SkipWhite
 	If IsAlpha(Look) Then
 		GetName
 	ElseIf IsDigit(Look) Then
 		GetNum
+	ElseIf Look = "\" Then
+		GetComment
+		Next1
 	Else
 		GetOp
 	End If
 End Sub
-
-Function GetDataType(n)
-	If IsParam(n) Then
-		GetDataType = FormalParamST.Item(n)(1)
-	ElseIf InTable(n) Then
-		GetDataType = ST.Item(n)(1)
-	End If
-End Function
 
 Function GetIdentType(n)
 	If IsParam(n) Then
@@ -374,11 +366,27 @@ Function GetIdentType(n)
 	End If
 End Function
 
+Function GetDataType(n)
+	If IsParam(n) Then
+		GetDataType = FormalParamST.Item(n)(1)
+	ElseIf InTable(n) Then
+		GetDataType = ST.Item(n)(1)
+	End If
+End Function
+
 Function GetAdditionalInfo(n)
 	If IsParam(n) Then
 		GetAdditionalInfo = FormalParamST.Item(n)(3)
 	ElseIf InTable(n) Then
 		GetAdditionalInfo = ST.Item(n)(2)
+	End If
+End Function
+
+Function SetAdditionalInfo(n,v)
+	If IsParam(n) Then
+		FormalParamST.Item(n)(3) = v
+	ElseIf InTable(n) Then
+		ST.Item(n)(2) = v
 	End If
 End Function
 
@@ -413,59 +421,81 @@ End Sub
 '---------------------------------------------------------------------
 'Preparsing subs
 Sub PreParseProcedures
-	PassNumber = 1
-	Dim n,arr(2)
-	arr(0) = "p"
-	GetChar
-	Do
-		arr(2) = 0
-		Do While Not Value = "SUB"
-			Next1
-			If Value = "" Then
-				StreamPos = 1
-				ErrLn = 1
-				Token = ""
-				Value = ""
+	If Value = "METADATA" Then SkipBlock("METADATA")
+	If Value = "GLOBAL" Then SkipBlock("GLOBAL")
+	Do While Value = "ENUMERATION"
+		SkipBlock("ENUMERATION")
+	Loop
+	If Value = "INIT" Then SkipBlock("INIT")
+	SkipBlock("MAIN")
+	RegisterProcedures
+End Sub
+
+Sub SkipBlock(Name)
+	Dim SkippedSymbol, EndKeyword
+	EndKeyword = "END" & Name
+	Do While Value <> EndKeyword
+		Next1
+		If Token = "'" Or Token = Chr(34) Then
+			SkippedSymbol = Token
+			Do While Look <> SkippedSymbol
 				GetChar
-				Next1
-				Exit Sub
-			End If
-		Loop
+			Loop
+			Next1
+		End If
+		If Token = "" Then
+			Abort("Missing keyword: " & EndKeyword)
+		End If
+	Loop
+	Next1
+End Sub
+
+Sub RegisterProcedures
+	Dim n, arr(2)
+	arr(0) = "procedure"
+	Do While Value = "SUB"
+		arr(2) = 0
 		MatchString("SUB")
 		n = Value
 		If InTable(n) Then Duplicate(n)
 		Next1
-		If Token = "(" Then
-			MatchString("(")
-			Do While Not Token = ")"
-				Scan
-				If Token = "STR" Or Token = "INT" Then
-					Next1
-				End If
-				arr(2) = arr(2) + 1
-				Next1
-				If Not Token = ")" Then MatchString(",")
-			Loop
-			If Token = ")" Then
-				MatchString(")")
-				If Token = ":" Then
-					MatchString(":")
-					Scan
-					If Not Token = "INT" And Not Token = "STR" Then
-						Abort("Undefined type (" & Value & ")")
-					End If
-					arr(1) = Token
-					AddEntry n, arr
-					Next1
-				Else
-					arr(1) = "INT"
-					AddEntry n, arr
-				End If
+		MatchString("(")
+		Do While Not Token = ")"
+			Scan
+			If Token = "STR" Or Token = "INT" Then
 				Next1
 			End If
-			n = ""
+			arr(2) = arr(2) + 1
+			Next1
+			If Token = "[" Then
+				MatchString("[")
+				MatchString("]")
+			End If
+			If Not Token = ")" Then MatchString(",")
+		Loop
+		MatchString(")")
+		If Token = ":" Then
+			MatchString(":")
+			Scan
+			If Not Token = "INT" And Not Token = "STR" Then
+				Abort("Undefined type (" & Value & ")")
+			End If
+			arr(1) = Token
+			Next1
+		Else
+			arr(1) = "INT"
 		End If
+		AddEntry n, arr
+		n = ""
+		SkipBlock("SUB")
+		If Value = "" Then Exit Do
 	Loop
+	StreamPos = 1
+	ErrLn = 1
+	Token = ""
+	Value = ""
+	GetChar
+	Next1
 End Sub
 
 Sub PreParseLibs
@@ -505,7 +535,7 @@ End Sub
 Sub PreParseLib
 	Dim SubName
 	Dim arr(2)
-	arr(0) = "p"
+	arr(0) = "procedure"
 	Dim n,x
 	Do While CharLib <> ""
 		If CharLib = "$" Then
@@ -557,7 +587,7 @@ Sub PreParseLib
 						SkipWhitespaceLib
 						GetNumLib
 						x = ValueLib
-						Constants.Add n, x
+						Constants.Add n, Array("INT",x)
 					End If
 				End If
 			End If
@@ -657,15 +687,48 @@ End Sub
 'Actual code :)
 Sub Prog
 	Header
+	WriteMetadata
 	PreParseProcedures
 	PreParseLibs
 	Prolog
 	TopDecls
+	Enumerations
 	InitBlock
 	MainBlock
 	Epilog
 	ProcDecl
 	Footer
+End Sub
+
+Sub WriteMetadata
+	Dim icon_name
+	If Value = "METADATA" Then
+		MatchString("METADATA")
+		
+		MatchString("ICON")
+		MatchString(":")
+		icon_name = Value
+		
+		
+		EmitLn("section '.rsrc' resource data readable")
+		EmitLn("directory RT_
+		
+		MatchString("ENDMETADATA")
+	End If
+End Sub
+
+Sub Enumerations
+	Dim i
+	Do While Value = "ENUMERATION"
+		i = 0
+		MatchString("ENUMERATION")
+		Do While Value <> "ENDENUMERATION"
+			Constants.Add Value, Array("INT",i)
+			i = i + 1
+			Next1
+		Loop
+		MatchString("ENDENUMERATION")
+	Loop
 End Sub
 
 Sub InitBlock
@@ -695,13 +758,13 @@ End Sub
 Sub Alloc(t,n)
 	CheckDup(n)
 	Allocate n
-	AddEntry n, Array("v",t,"")
+	AddEntry n, Array("variable",t,False)
 End Sub
 
 Sub AllocArray(t,n,i)
 	CheckDup(n)
 	Allocate n
-	AddEntry n,Array("a",t,"")
+	AddEntry n,Array("array",t,"")
 	EmitLn("invoke HeapAlloc,[hHeap],HEAP_ZERO_MEMORY," & i * 4 + 4)
 	EmitLn("MOV DWORD [V_" & n & "], eax")
 	EmitLn("MOV DWORD [eax], " & i)
@@ -750,24 +813,88 @@ Sub TopDecls
 				Loop
 			Else
 				MatchString("CONST")
+				If Value = "INT" Or Value = "STR" Then
+					t = Value
+					Next1
+				End If
 				n = Value
 				Next1
 				MatchString("=")
-				Constants.Add n, Value
-				Next1
+				If t = "INT" Then
+					Constants.Add n, Array(t,Value)
+					Next1
+				Else
+					Constants.Add n, Array(t,StringConst)
+				End If
+				t = "INT"
 				Do While Token = ","
 					MatchString(",")
+					If Value = "INT" Or Value = "STR" Then
+						t = Value
+						Next1
+					End If
 					n = Value
 					Next1
 					MatchString("=")
-					Constants.Add n, Value
-					Next1
+					If t = "INT" Then
+						Constants.Add n, Array(t,Value)
+						Next1
+					Else
+						Constants.Add n, Array(t,StringConst)
+					End If
+					t = "INT"
 				Loop
 			End If
 		Loop
 		MatchString("ENDGLOBAL")
 	End If
 End Sub
+
+Function StringConst
+	Dim s,length,L
+	If Token = Chr(34) Then
+		Do While Not Look = Chr(34)
+			If Look = Chr(10) Then ErrLn = ErrLn + 1
+			s = s & Look
+			GetChar
+		Loop
+		MatchString(Chr(34))
+		MatchString(Chr(34))
+		If Not StringTable.Exists(s) Then
+			L = NewLabel
+			StringTable.Add s, L
+			length = Len(s)
+			s = Replace(s,"'","',39,'")
+			s = Replace(s,VbCrLf,"',13,10,'")
+			EmitLnD(L & " dd " & length)
+			EmitLnD("db '" & s & "',0")
+		Else
+			L = StringTable.Item(s)
+		End If
+		StringConst = L
+	ElseIf Token = "'" Then
+		Do While Not Look = "'"
+			If Look = Chr(10) Then ErrLn = ErrLn + 1
+			s = s & Look
+			GetChar
+		Loop
+		MatchString("'")
+		MatchString("'")
+		If Not StringTable.Exists(s) Then
+			L = NewLabel
+			StringTable.Add s, L
+			length = Len(s)
+			s = Replace(s,VbCrLf,"',13,10,'")
+			EmitLnD(L & " dd " & length)
+			EmitLnD("db '" & s & "',0")
+		Else
+			L = StringTable.Item(s)
+		End If
+		StringConst = L
+	Else
+		Expected("Constant string")
+	End If
+End Function
 
 Sub ProcDecl
 	Do
@@ -782,7 +909,7 @@ End Sub
 Sub Assignement(n)
 	Dim v,k
 	CheckTable(n)
-	If Not GetIdentType(n) = "v" And Not IsParam(n) Then
+	If Not GetIdentType(n) = "variable" And Not IsParam(n) Then
 		Abort("Incorrect identifier ('" & n & "')")
 	End If
 	Select Case Token
@@ -798,14 +925,22 @@ Sub Assignement(n)
 			ElseIf GetDataType(n) = "STR" Then
 				StringExpression
 				If IsParam(n) Then
-					Push
-					FreeHeapBufferLoc(ParamNumber(n))
-					Pop
+					If GetAdditionalInfo(n) = True Then
+						Push
+						FreeHeapBufferLoc(ParamNumber(n))
+						Pop
+					Else
+						SetAdditionalInfo n,True
+					End If
 					StoreParam(ParamNumber(n))
 				Else
-					Push
-					FreeHeapBuffer(n)
-					Pop
+					If GetAdditionalInfo(n) = True Then
+						Push
+						FreeHeapBuffer(n)
+						Pop
+					Else
+						SetAdditionalInfo n,True
+					End If
 					Store(n)
 				End If
 			Else
@@ -915,11 +1050,14 @@ Sub Block(L,Ret)
 			Case Else:
 				n = Value
 				Next1
-				If GetIdentType(n) = "p" Then
+				If GetIdentType(n) = "procedure" Then
 					CallProc(n)
-				ElseIf GetIdentType(n) = "v" Then
+					If GetDataType(n) = "STR" Then
+						FreeMainReg
+					End If
+				ElseIf GetIdentType(n) = "variable" Then
 					Assignement(n)
-				ElseIf GetIdentType(n) = "a" Then
+				ElseIf GetIdentType(n) = "array" Then
 					ArrayAssignement(n)
 				ElseIf Token = ":" Then
 					PostLabel("V_" & n)
@@ -943,11 +1081,16 @@ Sub Semi
 End Sub
 
 Sub DoCall
+	Dim n
 	MatchString("CALL")
 	If Not InTable(Value) Then Undefined(Value)
-	If GetIdentType(Value) <> "p" Then Abort(n & " is not a subroutine")
-	CallProc(Value)
+	If GetIdentType(Value) <> "procedure" Then Abort(n & " is not a subroutine")
+	n = Value
 	Next1
+	CallProc(n)
+	If GetDataType(n) = "STR" Then
+		FreeMainReg
+	End If
 End Sub
 
 Sub CallProc(n)
@@ -978,7 +1121,10 @@ Sub Param
 	If Token = "," Or Token = ")" Then
 		PushNull
 	Else
-		If Token = Chr(34) Or Token = "'" Or GetDataType(Value) = "STR" Then
+		If Value = "ARRAY" Then
+			MatchString("ARRAY")
+			ArrayExpression
+		ElseIf Token = Chr(34) Or Token = "'" Or GetDataType(Value) = "STR" Then
 			StringExpression
 		Else
 			BoolExpression
@@ -1008,35 +1154,48 @@ Sub Factor
 		Next1
 		BoolExpression
 		MatchString(")")
-	Else
-		If Token = "x" Then
-			n = Value
-			Next1
-			If GetIdentType(n) = "p" Then
-				If GetDataType(n) = "STR" Then Abort("Type mismatch, procedure " & n & " is of type STR instead of INT")
-				CallProc(n)
-			ElseIf GetIdentType(n) = "a" Then
-				If GetDataType(n) = "STR" Then Abort("Type mismatch, array " & n & " is of type STR instead of INT")
-				MatchString("[")
-				Expression
-				ConvertArrayOffset
-				MatchString("]")
-				LoadArrayCell n
+	ElseIf Token = "@" Then
+		MatchString("@")
+		If GetIdentType(Value) <> "" Then
+			If IsParam(Value) Then
+				LoadLocalPointer(Value)
 			Else
-				If IsParam(n) Then
-					If GetDataType(n) = "STR" Then Abort("Type mismatch, variable " & n & " is of type STR instead of INT")
-					LoadParam(ParamNumber(n))
-				Else
-					If GetDataType(n) = "STR" Then Abort("Type mismatch, variable " & n & " is of type STR instead of INT")
-					LoadVar(n)
-				End If
+				LoadPointer(Value)
 			End If
-		ElseIf Token = "#" Then
-			LoadConst(Value)
 			Next1
 		Else
-			Expected("Math Factor")
+			Undefined(Value)
 		End If
+	ElseIf Token = "x" Then
+		n = Value
+		Next1
+		If GetIdentType(n) = "procedure" Then
+			If GetDataType(n) = "STR" Then Abort("Type mismatch, procedure " & n & " is not of type INT")
+			CallProc(n)
+		ElseIf GetIdentType(n) = "array" Then
+			If GetDataType(n) = "STR" Then Abort("Type mismatch, array " & n & " is not of type INT")
+			MatchString("[")
+			Expression
+			ConvertArrayOffset
+			MatchString("]")
+			LoadArrayCell n
+		ElseIf IsParam(n) Then
+			If GetDataType(n) = "STR" Then Abort("Type mismatch, variable " & n & " is not of type INT")
+			LoadParam(ParamNumber(n))
+		ElseIf InTable(n) Then
+			If GetDataType(n) = "STR" Then Abort("Type mismatch, variable " & n & " is not of type INT")
+			LoadVar(n)
+		ElseIf Constants.Exists(n) Then
+			If Constants.Item(n)(0) = "STR" Then Abort("Type mismatch, constant " & n & " is not of type INT")
+			LoadConstant(n)
+		Else
+			Undefined(n)
+		End If
+	ElseIf Token = "#" Then
+		LoadConst(Value)
+		Next1
+	Else
+		Expected("Math Factor")
 	End If
 End Sub
 
@@ -1265,6 +1424,7 @@ End Sub
 
 Sub BoolExpression
 	BoolTerm
+	Scan
 	Do While IsOrop(Token)
 		Push
 		Select Case Value
@@ -1273,6 +1433,7 @@ Sub BoolExpression
 			Case "~":BoolXor
 			Case "XOR":BoolXor
 		End Select
+		Scan
 	Loop
 End Sub
 
@@ -1288,7 +1449,7 @@ Sub StringTerm
 			If Look = Chr(10) Then ErrLn = ErrLn + 1
 			s = s & Look
 			GetChar
-		loop
+		Loop
 		MatchString(Chr(34))
 		MatchString(Chr(34))
 		If Not StringTable.Exists(s) Then
@@ -1304,13 +1465,15 @@ Sub StringTerm
 		End If
 		
 		AllocateHeapBuffer(Len(s)+5)
-		CopyStringToBuf(L)
+		If Len(s) <> 0 Then
+			CopyStringToBuf(L)
+		End If
 	ElseIf Token = "'" Then
 		Do While Not Look = "'"
 			If Look = Chr(10) Then ErrLn = ErrLn + 1
 			s = s & Look
 			GetChar
-		loop
+		Loop
 		MatchString("'")
 		MatchString("'")
 		If Not StringTable.Exists(s) Then
@@ -1325,22 +1488,27 @@ Sub StringTerm
 		End If
 		
 		AllocateHeapBuffer(Len(s)+5)
-		CopyStringToBuf(L)
+		If Len(s) <> 0 Then
+			CopyStringToBuf(L)
+		End If
 	ElseIf Token = "x" Then
 		n = Value
 		Next1
-		If GetIdentType(n) = "p" Then
+		If GetIdentType(n) = "procedure" Then
 			If Not GetDataType(n) = "STR" Then Abort(n & " does not return a string")
 			CallProc(n)
-		ElseIf GetIdentType(n) = "a" Then
+		ElseIf GetIdentType(n) = "array" Then
 			If Not GetDataType(n) = "STR" Then Abort(n & " is not a string array")
 			MatchString("[")
 			Expression
 			ConvertArrayOffset
 			MatchString("]")
-			CopyStringArray n
+			CopyStringFromArray n
 		ElseIf InTable(n) Or IsParam(n) Then
 			If Not GetDataType(n) = "STR" Then Abort(n & " is not of type STR")
+			CopyStringVar(n)
+		ElseIf Constants.Exists(n) Then
+			If Not Constants.Item(n)(0) = "STR" Then Abort(n & " is not of type STR")
 			CopyStringVar(n)
 		Else
 			Undefined(n)
@@ -1362,14 +1530,32 @@ End Sub
 
 '---------------------------------------------------------------------
 '---------------------------------------------------------------------
+'Array Expressions
+'---------------------------------------------------------------------
+'---------------------------------------------------------------------
+Sub ArrayExpression
+	If GetIdentType(Value) <> "array" Then Abort("Array expected")
+	If GetDataType(Value) = "STR" Then
+		CopyStringArray(Value)
+	Else
+		CopyArray(Value)
+	End If
+	Next1
+	MatchString("[")
+	MatchString("]")
+End Sub
+
+'---------------------------------------------------------------------
+'---------------------------------------------------------------------
 'Control Structures
 '---------------------------------------------------------------------
 '---------------------------------------------------------------------
 Sub DoIf(L,Ret)
-	Dim Name,L1,L2,t
+	Dim Name,L1,L2
 	MatchString("IF")
 	L1 = NewLabel
 	BoolExpression
+	If Value = "THEN" Then MatchString("THEN")
 	L2 = NewLabel
 	BranchFalse(L2)
 	Block L,Ret
@@ -1378,6 +1564,7 @@ Sub DoIf(L,Ret)
 	Do While Value = "ELSEIF"
 		MatchString("ELSEIF")
 		BoolExpression
+		If Value = "THEN" Then MatchString("THEN")
 		L2 = NewLabel
 		BranchFalse(L2)
 		Block L,Ret
@@ -1516,7 +1703,7 @@ End Sub
 '---------------------------------------------------------------------
 '---------------------------------------------------------------------
 Sub DoSub
-	Dim Name,k,L1
+	Dim Name,k,L1,freeargs:freeargs = False
 	MatchString("SUB")
 	Name = Value
 	If IsKeyword(Value) Then Abort("Reserved keyword used as identifier (" & Value & ")")
@@ -1525,6 +1712,14 @@ Sub DoSub
 	MatchString("(")
 	FormalList
 	MatchString(")")
+	If Token = "(" Then
+		MatchString("(")
+		If Value = "STDCALL" Then
+			MatchString("STDCALL")
+			freeargs = True
+		End If
+		MatchString(")")
+	End If
 	If Token = ":" Then
 		MatchString(":")
 		If Value = "INT" Or Value = "STR" Then
@@ -1543,6 +1738,9 @@ Sub DoSub
 	AllocateLocalArrays
 	Block "",L1
 	LocFree k,L1
+	If freeargs Then
+		CleanArguments(GetAdditionalInfo(Name))
+	End If
 	Return
 	MatchString("ENDSUB")
 	ClearParams
@@ -1559,13 +1757,20 @@ Sub FormalList
 End Sub
 
 Sub FormalParam
-	Dim t:t = "INT"
+	Dim n,t:t = "INT"
 	If Value = "INT" Or Value = "STR" Then
 		t = Value
 		Next1
 	End If
-	AddParam Value,t,"v",0
+	n = Value
 	Next1
+	If Value = "[" Then
+		MatchString("[")
+		MatchString("]")
+		AddParam n,t,"array",-1
+	Else
+		AddParam n,t,"variable",True
+	End If
 End Sub
 
 Function LocDecls
@@ -1593,11 +1798,11 @@ Sub LocDecl
 	Next1
 	If Token = "[" Then
 		MatchString("[")
-		AddParam n,t,"a",Value
+		AddParam n,t,"array",Value
 		Next1
 		MatchString("]")
 	Else
-		AddParam n,t,"v",0
+		AddParam n,t,"variable",False
 	End If
 End Sub
 
@@ -1605,7 +1810,7 @@ Sub AllocateLocalArrays
 	Dim i,arr:arr = FormalParamST.Keys
 	If Not UBound(arr) = -1 Then
 		Do
-			If GetIdentType(arr(i)) = "a" Then
+			If GetIdentType(arr(i)) = "array" And Not GetAdditionalInfo(arr(i)) = -1 Then
 				AllocateLocalArray ParamNumber(arr(i)),GetAdditionalInfo(arr(i))
 			End If
 			i = i + 1
@@ -1625,12 +1830,12 @@ Function IsParam(n)
 	IsParam = FormalParamST.Exists(n)
 End Function
 
-Sub AddParam(n,t,data,i)
+Sub AddParam(n,IdentType,DataType,AdditionalInfo)
 	If IsKeyword(n) Then Abort("Reserved keyword used as identifier (" & n & ")")
 	If InTable(n) Then Abort(n & " is already declared in the global scope")
 	If IsParam(n) Then Duplicate(n)
 	NumParams = NumParams + 1
-	FormalParamST.Add n, Array(NumParams,t,data,i)
+	FormalParamST.Add n, Array(NumParams,IdentType,DataType,AdditionalInfo)
 End Sub
 
 Sub DoReturn(Ret)
@@ -1695,16 +1900,21 @@ Sub LoadConst(n)
 	EmitLn("MOV eax, " & n)
 End Sub
 
+Sub LoadPointer(n)
+	EmitLn("MOV eax, V_" & UCase(n))
+End Sub
+
+Sub LoadLocalPointer(n)
+	EmitLn("MOV eax, ebp")
+	EmitLn("ADD eax, " & ((NumParams + 2) * 4) - (ParamNumber(n) * 4))
+End Sub
+
 Sub LoadVar(n)
-	If Not InTable(n) Then
-		If Constants.Exists(n) Then
-			EmitLn("MOV eax, " & Constants.Item(n))
-		Else
-			Undefined(n)
-		End If
-	Else
-		EmitLn("MOV eax, DWORD [V_" & n & "]")
-	End If
+	EmitLn("MOV eax, DWORD [V_" & n & "]")
+End Sub
+
+Sub LoadConstant(n)
+	EmitLn("MOV eax, " & Constants.Item(n)(1))
 End Sub
 
 Sub Push
@@ -1776,8 +1986,8 @@ Sub LoadArrayCell(n)
 	EmitLn("MOV eax, DWORD [ebx]")
 End Sub
 
-Sub ConvertArrayOffset
-	EmitLn("IMUL eax, 4")
+Sub ConvertArrayOffset																				'//! OPTIMIZABLE
+	EmitLn("SHL eax, 2")
 	EmitLn("ADD eax, 4")
 End Sub
 
@@ -1812,12 +2022,23 @@ Sub PopCompare
 End Sub
 
 Sub StringCompare
+	Dim L1, L2
+	L1 = NewLabel
+	L2 = NewLabel
 	EmitLn("MOV esi, DWORD [esp]")
-	EmitLn("MOV edi, eax")
 	EmitLn("MOV ecx, DWORD [esi]")
+	EmitLn("CMP ecx, 0")
+	EmitLn("JE " & L1)
+	EmitLn("INC ecx")
+	EmitLn("MOV edi, eax")
 	EmitLn("ADD esi, 4")
 	EmitLn("ADD edi, 4")
 	EmitLn("REPE CMPSB")
+	EmitLn("JMP " & L2)
+	PostLabel(L1)
+	EmitLn("MOV ebx, DWORD [eax]")
+	EmitLn("CMP ebx, 0")
+	PostLabel(L2)
 End Sub
 
 Sub FreeMainReg
@@ -1869,7 +2090,7 @@ Sub SetGreaterOrEqual
 End Sub
 
 Sub Inc(n)
-	If Not GetIdentType(n) = "v" Then Abort("Identifiers other than variables cannot be incremented")
+	If Not GetIdentType(n) = "variable" Then Abort("Identifiers other than variables cannot be incremented")
 	If IsParam(n) Then
 		EmitLn("INC DWORD [ebp + " & ((NumParams + 2) * 4) - (ParamNumber(n) * 4) & "]")
 	Else
@@ -1878,7 +2099,7 @@ Sub Inc(n)
 End Sub
 
 Sub Dec(n)
-	If Not GetIdentType(n) = "v" Then Abort("Identifiers other than variables cannot be decremented")
+	If Not GetIdentType(n) = "variable" Then Abort("Identifiers other than variables cannot be decremented")
 	If IsParam(n) Then
 		EmitLn("DEC DWORD [ebp + " & ((NumParams + 2) * 4) - (ParamNumber(n) * 4) & "]")
 	Else
@@ -1950,6 +2171,14 @@ Sub CleanStack(n)
 	End If
 End Sub
 
+Sub CleanArguments(k)
+	If k > 0 Then
+		EmitLn("POP ebx")
+		EmitLn("ADD esp, " & k * 4)
+		EmitLn("PUSH ebx")
+	End If
+End Sub
+
 Sub LocAlloc(k)
 	If k > 0 Then
 		EmitLn("MOV ebx, DWORD [esp]")
@@ -1967,7 +2196,7 @@ Sub LocFree(k,L)
 	If Not UBound(arr) = -1 Then
 		Do
 			If GetDataType(arr(i)) = "STR" Then
-				If GetIdentType(arr(i)) = "a" Then
+				If GetIdentType(arr(i)) = "array" Then
 					FreeStringArrayLoc(arr(i))
 				End If
 				FreeHeapBufferLoc(ParamNumber(arr(i)))
@@ -1987,15 +2216,16 @@ Sub LocFree(k,L)
 End Sub
 
 Sub FreeStringArrayLoc(n)
-	Dim i, o
-	i = GetAdditionalInfo(n)
+	Dim o
 	o = ParamNumber(n)
 	EmitLn("MOV ebx, DWORD [ebp + " & ((NumParams + 2) * 4) - (o * 4) & "]")
-	Do While i <> 0
-		EmitLn("ADD ebx, 4")
-		EmitLn("invoke HeapFree, [hHeap], 0, DWORD [ebx]")
-		i = i - 1
-	Loop
+	EmitLn("MOV ecx, DWORD [ebx]")
+	PostLabel("@@")
+	EmitLn("PUSH ecx")
+	EmitLn("ADD ebx, 4")
+	EmitLn("invoke HeapFree,[hHeap],0,DWORD [ebx]")
+	EmitLn("POP ecx")
+	EmitLn("LOOP @b")
 End Sub
 
 Sub LocAllocMain(k)
@@ -2018,6 +2248,64 @@ Sub AllocateLocalArray(o,i)
 	EmitLn("invoke HeapAlloc,[hHeap],HEAP_ZERO_MEMORY," & i * 4 + 4)
 	EmitLn("MOV DWORD [ebp + " & ((NumParams + 2) * 4) - (o * 4) & "], eax")
 	EmitLn("MOV DWORD [eax], " & i)
+End Sub
+
+Sub CopyArray(n)
+	If IsParam(n) Then
+		o = ((NumParams + 2) * 4) - (ParamNumber(n) * 4)
+		EmitLn("MOV esi, DWORD [ebp + " & o & "]")
+	Else
+		EmitLn("MOV esi, [V_" & n & "]")
+	End If
+	EmitLn("MOV eax, DWORD [esi]")
+	EmitLn("INC eax")
+	EmitLn("SHL eax, 2")
+	EmitLn("MOV ebx, eax")
+	EmitLn("invoke HeapAlloc,[hHeap],HEAP_ZERO_MEMORY,eax")
+	EmitLn("MOV edi, eax")
+	EmitLn("MOV ecx, ebx")
+	EmitLn("REP MOVSB")
+End Sub
+
+Sub CopyStringArray(n)
+	Dim o
+	If IsParam(n) Then
+		o = ((NumParams + 2) * 4) - (ParamNumber(n) * 4)
+		EmitLn("MOV esi, DWORD [ebp + " & o & "]")
+	Else
+		EmitLn("MOV esi, [V_" & n & "]")
+	End If
+	EmitLn("MOV eax, DWORD [esi]")
+	EmitLn("INC eax")
+	EmitLn("SHL eax, 2")
+	EmitLn("invoke HeapAlloc,[hHeap],HEAP_ZERO_MEMORY,eax")
+	EmitLn("MOV edi, eax")
+	EmitLn("MOV ecx, DWORD [esi]")
+	EmitLn("MOV DWORD [eax], ecx")
+	EmitLn("PUSH eax")
+	PostLabel("@@")
+	EmitLn("PUSH ecx")
+	EmitLn("ADD edi, 4")
+	EmitLn("ADD esi, 4")
+	
+	EmitLn("MOV edx, DWORD [esi]")
+	EmitLn("MOV edx, DWORD [edx]")
+	EmitLn("ADD edx, 5")
+	EmitLn("invoke HeapAlloc,[hHeap],HEAP_ZERO_MEMORY,edx")
+	EmitLn("PUSH edi")
+	EmitLn("PUSH esi")
+	EmitLn("MOV edi, eax")
+	EmitLn("MOV esi, DWORD [esi]")
+	EmitLn("MOV ecx, DWORD [esi]")
+	EmitLn("MOV DWORD [edi], ecx")
+	CopyString
+	EmitLn("POP esi")
+	EmitLn("POP edi")
+	EmitLn("MOV DWORD [edi], eax")
+	
+	EmitLn("POP ecx")
+	EmitLn("LOOP @b")
+	EmitLn("POP eax")
 End Sub
 
 '---------------------------------------------------------------------
@@ -2063,6 +2351,8 @@ End Sub
 Sub CopyStringVar(n)
 	If IsParam(n) Then
 		EmitLn("MOV esi, [ebp + " & ((NumParams + 2) * 4) - (ParamNumber(n) * 4) & "]")
+	ElseIf Constants.Exists(n) Then
+		EmitLn("MOV esi, " & Constants.Item(n)(1))
 	Else
 		EmitLn("MOV esi, [V_" & n & "]")
 	End If
@@ -2076,7 +2366,7 @@ Sub CopyStringVar(n)
 	CopyString
 End Sub
 
-Sub CopyStringArray(n)
+Sub CopyStringFromArray(n)
 	If IsParam(n) Then
 		EmitLn("MOV esi, [ebp + " & ((NumParams + 2) * 4) - (ParamNumber(n) * 4) & "]")
 	Else
