@@ -7,8 +7,8 @@ long time (like months); and there it is! I wrote it because I needed a
 multi-purpose, compilable and FREE programming language, that could be
 installed from a simple ZIP file. Since none of the languages I tried to
 use met all of the requierements, I had to write one by myself. It might
-not be the most powerful, fastest, compact language you've ever seen, but
-I hope you'll enjoy coding with it :).
+not be the most powerful, fastest, most compact language you've ever seen,
+but I hope you'll enjoy coding with it :).
 
 I personally like to use .dbs as the file extension of my DBasic source code
 files, but you do you.
@@ -30,8 +30,8 @@ assembled by feeding it to FAsm.exe, and you can then find you executable
 in the working directory, named with the same file name, with the file
 extension replaced by .exe.
 
-To see the command line output of the compiler, you need to launch it with
-CScript:
+To see the command line output of the compiler, you need to run it with
+the CScript VBS interpreter, available by default on windows:
 
 CScript.exe DBasic.vbs code.dbs
 
@@ -69,6 +69,13 @@ MAIN
 	...
 ENDMAIN
 
+The blocks constituting a program must follow this order:
+First, an optional METADATA block:
+
+METADATA
+	...
+ENDMETADATA
+
 It may also contain a GLOBAL block, and an INIT block, in the following
 order:
 
@@ -88,7 +95,7 @@ ENDENUMERATION
 
 What this block does is automatically assigning values to constants, which
 may be useful when you need to declare a lot of constants and you don't want
-to make the GLOBAL block to be unreadable.
+to make the GLOBAL block unreadable.
 
 After that, you may place an INIT block, then there is the mandatory MAIN
 block:
@@ -107,6 +114,28 @@ ENDMAIN
 
 (Notice that the language is case-insensitive, that comments are enclosed
 by backslashes, and that '...' is a valid statement that just does nothing).
+
+\-------------------------------------------------------------------------\
+\Executable metadata\
+The first block of a program is the one specifying the metadatas of the
+executable. It is basically a list of statements redacted like this:
+
+MetaData
+	\In this example code, the strings are enclosed in single quotes,
+	but double quotes are valid as well\
+	icon: 'icon.ico'
+	FileDescription: 'Test program'
+	LegalCopyright: 'No rights reserved'
+	FileVersion: '1.0'
+	ProductVersion: '1.0'
+	OriginalFileName: 'Test.dbs'
+EndMetaData
+
+You may place these statements in any order that you like, and omit as many
+of them as you want. All the available statements are showed in this example.
+
+Note that the icon file path must be relative to the compiler, and not
+to the compiled file.
 
 \-------------------------------------------------------------------------\
 \Variables declarations\
@@ -163,11 +192,10 @@ set to 0 on declaration, because they're not.
 
 \-------------------------------------------------------------------------\
 \Assignements\
-If you've written even a single line of code in you life, you know that you
-can you the '=' operator to assign a value to a variable. I also implemented
-use the '+=', '-=' and '*=' operators because they're pretty useful, and
-the generated code is more efficient that the code for 'x = x + y'. I'll
-still give an example, just in case:
+As in most programming language, the DBasic assignement operator is '='. I
+also implemented the '+=', '-=' and '*=' operators because they're pretty
+useful, and the generated code is more efficient that the code for
+'x = x + y'. I'll still give an example, just in case:
 
 x = 2 + 4 * (5-6)
 x *= 5
@@ -177,7 +205,7 @@ x -= 3
 \Mathematics\
 The available operators for mathematics expressions in DBasic are +,-,*,/
 and % for modulo. You can also use parentheses. Divisions are euclidians,
-because I have no clue on how floating points work on the binary level,
+because I have no clue about how floating points work on the binary level,
 and I have no desire to dive into that. That also means floating points
 number do not exist in DBasic. Like, who even needs floating points ?
 Anyways, there's no power operator either, feel free to code a Pow()

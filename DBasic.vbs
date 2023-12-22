@@ -3,7 +3,7 @@ Option Explicit
 Dim Shell:Set Shell = CreateObject("WScript.Shell")
 Dim Fso:Set Fso = CreateObject("Scripting.FileSystemObject")
 Dim ST :Set ST  = CreateObject("Scripting.Dictionary")
-'<LabelName> :: Array(<p|v|a>, <returntype|type|type>, <argnumber|initialized|len>)
+'<LabelName> :: Array(<p|v|a>, <returntype|type|type>, <argnumber|str_initialized|>)
 
 Dim FormalParamST:Set FormalParamST = CreateObject("Scripting.Dictionary")
 '<Name> :: Array(<ParamNumber>, <type>, <v|a>, <initialized|len>)
@@ -15,8 +15,6 @@ Dim CharLib,CounterLib,ValueLib,TextLib
 Dim ErrLn
 Dim DebugMode
 Dim PassNumber
-
-Dim HeapBuffers
 
 '---------------------------------------------------------------------
 'Definition Of Keywords And Token Types
@@ -39,7 +37,7 @@ Constants.Add "MEANING_OF_LIFE", Array("INT",42)
 
 '---------------------------------------------------------------------
 'Variable Declarations
-Dim CodeOutput,DataOutput
+Dim CodeOutput,DataOutput,RessourceOutput
 
 Dim Look, Token, Value
 
@@ -109,7 +107,8 @@ Sub WriteOutput
 		DataOutput = "section '.data' data readable writeable" & VbCrLf & DataOutput
 	End If
 	File.Write 	CodeOutput & VbCrLf &_
-			DataOutput
+			DataOutput & VbCrLf &_
+			RessourceOutput
 	File.Close
 End Sub
 
@@ -409,6 +408,10 @@ Sub EmitLnD(s)
 	DataOutput = DataOutput & s & VbCrLf
 End Sub
 
+Sub EmitLnR(s)
+	RessourceOutput = RessourceOutput & s & VbCrLf
+End Sub
+
 Function NewLabel
 	NewLabel = "L" & LCount
 	LCount = LCount + 1
@@ -639,6 +642,37 @@ Sub Header
 		"section '.text' code readable writeable executable" & VbCrLf)
 End Sub
 
+Sub WriteMetadataHeader
+	EmitLnR("section '.rsrc' resource data readable")
+End Sub
+
+Sub WriteMetadataDirectory(Icon,Version)
+	If Icon And Version Then
+		EmitLnR("directory RT_ICON,icons,\")
+		EmitLnR("RT_GROUP_ICON,group_icons,\")
+		EmitLnR("RT_VERSION,versions")
+		EmitLnR("resource icons,1,LANG_NEUTRAL,icon_data")
+		EmitLnR("resource group_icons,17,LANG_NEUTRAL,main_icon")
+		EmitLnR("resource versions,1,LANG_NEUTRAL,version")
+	ElseIf Icon Then
+		EmitLnR("directory RT_ICON,icons,\")
+		EmitLnR("RT_GROUP_ICON,group_icons")
+		EmitLnR("resource icons,1,LANG_NEUTRAL,icon_data")
+		EmitLnR("resource group_icons,17,LANG_NEUTRAL,main_icon")
+	ElseIf Version Then
+		EmitLnR("directory RT_VERSION,versions")
+		EmitLnR("resource versions,1,LANG_NEUTRAL,version")
+	End If
+End Sub
+
+Sub WriteIcon(Name)
+	EmitLnR("icon main_icon,icon_data,'" & Name & "'")
+End Sub
+
+Sub WriteVersion(VersionString)
+	EmitLnR("versioninfo version,VOS__WINDOWS32,VFT_APP,VFT2_UNKNOWN,LANG_ENGLISH+SUBLANG_DEFAULT,0" & VersionString)
+End Sub
+
 Sub Prolog
 	PassNumber = 2
 	PostLabel("start")
@@ -687,10 +721,10 @@ End Sub
 'Actual code :)
 Sub Prog
 	Header
-	WriteMetadata
 	PreParseProcedures
 	PreParseLibs
 	Prolog
+	WriteMetadata
 	TopDecls
 	Enumerations
 	InitBlock
@@ -701,12 +735,77 @@ Sub Prog
 End Sub
 
 Sub WriteMetadata
-	Dim icon_name
+	Dim dict
+	Dim arr,i
+	Dim IconPresent, VersionPresent
+	Dim VersionString
 	If Value = "METADATA" Then
+		Set dict = CreateObject("scripting.dictionary")
 		MatchString("METADATA")
 		
-		'...
-		'work in progress
+		Do While Value <> "ENDMETADATA"
+			'Value = "PRODUCTVERSION" Or Value = "ORIGINALFILENAME" Then
+			If Value = "ICON" Then
+				IconPresent = True
+				Next1
+				MatchString(":")
+				GetString
+				dict.Add "ICON", Value
+				Next1
+			ElseIf Value = "FILEDESCRIPTION" Then
+				VersionPresent = True
+				Next1
+				MatchString(":")
+				GetString
+				dict.Add "FileDescription", Value
+				Next1
+			ElseIf Value = "LEGALCOPYRIGHT" Then
+				VersionPresent = True
+				Next1
+				MatchString(":")
+				GetString
+				dict.Add "LegalCopyright", Value
+				Next1
+			ElseIf Value = "FILEVERSION" Then
+				VersionPresent = True
+				Next1
+				MatchString(":")
+				GetString
+				dict.Add "FileVersion", Value
+				Next1
+			ElseIf Value = "PRODUCTVERSION" Then
+				VersionPresent = True
+				Next1
+				MatchString(":")
+				GetString
+				dict.Add "ProductVersion", Value
+				Next1
+			ElseIf Value = "ORIGINALFILENAME" Then
+				VersionPresent = True
+				Next1
+				MatchString(":")
+				GetString
+				dict.Add "OriginalFilename", Value
+				Next1
+			Else
+				Abort("Unrecognized attribute: " & Value)
+			End If
+		Loop
+		
+		arr = dict.Keys
+		If Not UBound(arr) = -1 Then
+			WriteMetadataHeader
+			WriteMetadataDirectory IconPresent, VersionPresent
+			Do
+				If arr(i) = "ICON" Then
+					WriteIcon(dict.Item(arr(i)))
+				Else
+					VersionString = VersionString & ",\" & VbCrLf & "'" &  arr(i) & "','" & dict.Item(arr(i)) & "'"
+				End If
+				i = i + 1
+			Loop While i <= UBound(arr)
+			WriteVersion(VersionString)
+		End If
 		
 		MatchString("ENDMETADATA")
 	End If
@@ -1523,6 +1622,29 @@ Sub StringExpression
 	Loop
 End Sub
 
+Sub GetString
+	Dim s
+	If Value = "'" Then
+		Do While Not Look = "'"
+			If Look = Chr(10) Then ErrLn = ErrLn + 1
+			s = s & Look
+			GetChar
+		Loop
+		MatchString("'")
+	ElseIf Value = Chr(34) Then
+		Do While Not Look = Chr(34)
+			If Look = Chr(10) Then ErrLn = ErrLn + 1
+			s = s & Look
+			GetChar
+		Loop
+		MatchString(Chr(34))
+	Else
+		Expected("String")
+	End If
+	Value = s
+	Token = "STR"
+End Sub
+
 '---------------------------------------------------------------------
 '---------------------------------------------------------------------
 'Array Expressions
@@ -2062,7 +2184,7 @@ End Sub
 
 Sub SetGreater
 	EmitLn("MOV eax, 0")
-	EmitLn("SETA al")
+	EmitLn("SETG al")
 	EmitLn("IMUL eax, 0xFFFFFFFF")
 End Sub
 

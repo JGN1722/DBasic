@@ -54,6 +54,10 @@ V_OPENWINDOW:
 	MOV edi, eax
 	invoke GetModuleHandle, 0
 	MOV DWORD [edi + 16], eax
+	invoke LoadIcon,eax,17
+	MOV DWORD [edi + 20], eax
+	invoke LoadCursor,0,IDC_ARROW
+	MOV DWORD [edi + 24], eax
 	MOV eax, DWORD [ebp + 8]
 	MOV DWORD [edi + 4], eax
 	MOV DWORD [edi + 28], COLOR_BTNFACE+1
