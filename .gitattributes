@@ -1,1 +1,3 @@
-EXAMPLES/* linguist-vendored
+* linguist-vendored
+DBasic.vbs linguist-vendored=false
+LIBS/* linguist-vendored=false
