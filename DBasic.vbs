@@ -337,6 +337,7 @@ Sub GetComment
 	Value = ""
 	GetChar
 	Do While Look <> "\"
+		If Look = Chr(10) Then ErrLn = ErrLn + 1
 		Value = Value & Look
 		GetChar
 	Loop
@@ -689,9 +690,7 @@ Sub Footer
 	IncludeLibs
 	EmitLn(	"section '.idata' import data readable writeable" & VbCrLf &_
 		"library kernel32,'KERNEL32.DLL',\" & VbCrLf &_
-		"	 user32,'USER32.DLL',\" & VbCrLf &_
-		"	 ole32,'OLE32.DLL'" & VbCrLf &_
-		"import  ole32,CoInitialize,'CoInitialize'" & VbCrLf &_
+		"	 user32,'USER32.DLL'" & VbCrLf &_
 		"include 'fasm\include\api\kernel32.inc'" & VbCrLf &_
 		"include 'fasm\include\api\user32.inc'")
 End Sub
@@ -787,6 +786,10 @@ Sub WriteMetadata
 				GetString
 				dict.Add "OriginalFilename", Value
 				Next1
+			ElseIf Token = "." Then
+				MatchString(".")
+				MatchString(".")
+				MatchString(".")
 			Else
 				Abort("Unrecognized attribute: " & Value)
 			End If
@@ -804,7 +807,7 @@ Sub WriteMetadata
 				End If
 				i = i + 1
 			Loop While i <= UBound(arr)
-			WriteVersion(VersionString)
+			If VersionPresent Then WriteVersion(VersionString)
 		End If
 		
 		MatchString("ENDMETADATA")
@@ -817,9 +820,15 @@ Sub Enumerations
 		i = 0
 		MatchString("ENUMERATION")
 		Do While Value <> "ENDENUMERATION"
-			Constants.Add Value, Array("INT",i)
-			i = i + 1
-			Next1
+			If Value = "." Then
+				MatchString(".")
+				MatchString(".")
+				MatchString(".")
+			Else
+				Constants.Add Value, Array("INT",i)
+				i = i + 1
+				Next1
+			End If
 		Loop
 		MatchString("ENDENUMERATION")
 	Loop
@@ -868,7 +877,7 @@ Sub TopDecls
 	Dim n,t:t = "INT"
 	If Value = "GLOBAL" Then
 		MatchString("GLOBAL")
-		Do While Value = "DIM" Or Value = "CONST"
+		Do While Value = "DIM" Or Value = "CONST" Or Value = "."
 			If Value = "DIM" Then
 				MatchString("DIM")
 				If Value = "INT" Or Value = "STR" Then
@@ -905,7 +914,7 @@ Sub TopDecls
 					End If
 					t = "INT"
 				Loop
-			Else
+			ElseIf Value = "CONST" Then
 				MatchString("CONST")
 				If Value = "INT" Or Value = "STR" Then
 					t = Value
@@ -938,6 +947,10 @@ Sub TopDecls
 					End If
 					t = "INT"
 				Loop
+			Else
+				MatchString(".")
+				MatchString(".")
+				MatchString(".")
 			End If
 		Loop
 		MatchString("ENDGLOBAL")
@@ -1536,7 +1549,7 @@ End Sub
 'String Expressions
 '---------------------------------------------------------------------
 '---------------------------------------------------------------------
-Sub StringTerm
+Sub FirstStringTerm
 	dim n,s,L,length
 	If Token = Chr(34) Then
 		Do While Not Look = Chr(34)
@@ -1612,13 +1625,85 @@ Sub StringTerm
 	End If
 End Sub
 
+Sub AppendStringTerm
+	dim n,s,L,length,NeedToFree
+	NeedToFree = False
+	If Token = Chr(34) Then
+		Do While Not Look = Chr(34)
+			If Look = Chr(10) Then ErrLn = ErrLn + 1
+			s = s & Look
+			GetChar
+		Loop
+		MatchString(Chr(34))
+		MatchString(Chr(34))
+		If Not StringTable.Exists(s) Then
+			L = NewLabel
+			StringTable.Add s, L
+			length = Len(s)
+			s = Replace(s,"'","',39,'")
+			s = Replace(s,VbCrLf,"',13,10,'")
+			EmitLnD(L & " dd " & length)
+			EmitLnD("db '" & s & "',0")
+		Else
+			L = StringTable.Item(s)
+		End If
+		
+		LoadLabel(L)
+	ElseIf Token = "'" Then
+		Do While Not Look = "'"
+			If Look = Chr(10) Then ErrLn = ErrLn + 1
+			s = s & Look
+			GetChar
+		Loop
+		MatchString("'")
+		MatchString("'")
+		If Not StringTable.Exists(s) Then
+			L = NewLabel
+			StringTable.Add s, L
+			length = Len(s)
+			s = Replace(s,VbCrLf,"',13,10,'")
+			EmitLnD(L & " dd " & length)
+			EmitLnD("db '" & s & "',0")
+		Else
+			L = StringTable.Item(s)
+		End If
+		
+		LoadLabel(L)
+	ElseIf Token = "x" Then
+		n = Value
+		Next1
+		If GetIdentType(n) = "procedure" Then
+			If Not GetDataType(n) = "STR" Then Abort(n & " does not return a string")
+			CallProc(n)
+			NeedToFree = True
+		ElseIf GetIdentType(n) = "array" Then
+			If Not GetDataType(n) = "STR" Then Abort(n & " is not a string array")
+			MatchString("[")
+			Expression
+			ConvertArrayOffset
+			MatchString("]")
+			LoadStringFromArray n
+		ElseIf InTable(n) Or IsParam(n) Then
+			If Not GetDataType(n) = "STR" Then Abort(n & " is not of type STR")
+			LoadVar(n)
+		ElseIf Constants.Exists(n) Then
+			If Not Constants.Item(n)(0) = "STR" Then Abort(n & " is not of type STR")
+			LoadConst(n)
+		Else
+			Undefined(n)
+		End If
+	Else
+		Expected("String")
+	End If
+	Concat(NeedToFree)
+End Sub
+
 Sub StringExpression
-	StringTerm
+	FirstStringTerm
 	Do While Token = "&"
 		MatchString("&")
 		Push
-		StringTerm
-		Concat
+		AppendStringTerm
 	Loop
 End Sub
 
@@ -1856,9 +1941,10 @@ Sub DoSub
 	Block "",L1
 	LocFree k,L1
 	If freeargs Then
-		CleanArguments(GetAdditionalInfo(Name))
+		Return(GetAdditionalInfo(Name))
+	Else
+		Return(0)
 	End If
-	Return
 	MatchString("ENDSUB")
 	ClearParams
 End Sub
@@ -2034,6 +2120,10 @@ Sub LoadConstant(n)
 	EmitLn("MOV eax, " & Constants.Item(n)(1))
 End Sub
 
+Sub LoadLabel(L)
+	EmitLn("MOV eax, " & L)
+End Sub
+
 Sub Push
 	EmitLn("PUSHD eax")
 End Sub
@@ -2103,7 +2193,7 @@ Sub LoadArrayCell(n)
 	EmitLn("MOV eax, DWORD [ebx]")
 End Sub
 
-Sub ConvertArrayOffset																				'//! OPTIMIZABLE
+Sub ConvertArrayOffset
 	EmitLn("SHL eax, 2")
 	EmitLn("ADD eax, 4")
 End Sub
@@ -2202,7 +2292,7 @@ End Sub
 
 Sub SetGreaterOrEqual
 	EmitLn("MOV eax, 0")
-	EmitLn("SETAE al")
+	EmitLn("SETGE al")
 	EmitLn("IMUL eax, 0xFFFFFFFF")
 End Sub
 
@@ -2268,8 +2358,8 @@ Sub ProcHeader
 	EmitLn("MOV ebp, esp")
 End Sub
 
-Sub Return
-	EmitLn("RET")
+Sub Return(k)
+	EmitLn("RET " & k * 4)
 End Sub
 
 Sub LoadParam(n)
@@ -2425,6 +2515,17 @@ Sub CopyStringArray(n)
 	EmitLn("POP eax")
 End Sub
 
+Sub LoadStringFromArray(n)
+	If IsParam(n) Then
+		EmitLn("MOV esi, [ebp + " & ((NumParams + 2) * 4) - (ParamNumber(n) * 4) & "]")
+	Else
+		EmitLn("MOV esi, [V_" & n & "]")
+	End If
+	EmitLn("ADD esi, eax")
+	EmitLn("MOV esi, DWORD [esi]")
+	EmitLn("MOV eax, esi")
+End Sub
+
 '---------------------------------------------------------------------
 '---------------------------------------------------------------------
 'String Code Generation Routines
@@ -2501,7 +2602,7 @@ Sub CopyStringFromArray(n)
 	CopyString
 End Sub
 
-Sub Concat
+Sub Concat(WasABufferAllocated)
 	EmitLn("MOV esi, eax")
 	EmitLn("MOV eax, DWORD [esp]")
 	EmitLn("MOV eax, DWORD [eax]")
@@ -2517,9 +2618,11 @@ Sub Concat
 	EmitLn("ADD edi, DWORD [edi]")
 	CopyString
 	EmitLn("MOV DWORD [eax], ebx")
-	EmitLn("PUSHD eax")
-	EmitLn("invoke HeapFree, [hHeap], 0, DWORD [esp + 4]")
-	EmitLn("POPD eax")
+	If WasABufferAllocated Then
+		EmitLn("PUSHD eax")
+		EmitLn("invoke HeapFree, [hHeap], 0, DWORD [esp + 4]")
+		EmitLn("POPD eax")
+	End If
 	EmitLn("ADD esp, 4")
 End Sub
 
