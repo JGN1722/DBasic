@@ -1,4 +1,4 @@
 * linguist-vendored
 DBasic.vbs linguist-vendored=false
 LIBS/* linguist-vendored=false
-*.asm linguist-language=FAsm
+*.asm linguist-language=Assembly
