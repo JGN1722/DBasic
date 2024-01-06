@@ -6,9 +6,25 @@ Dim ST :Set ST  = CreateObject("Scripting.Dictionary")
 '<LabelName> :: Array(<p|v|a>, <returntype|type|type>, <argnumber|str_initialized|>)
 
 Dim FormalParamST:Set FormalParamST = CreateObject("Scripting.Dictionary")
-'<Name> :: Array(<ParamNumber>, <type>, <v|a>, <initialized|len>)
+'<Name> :: Array(<ParamNumber>, <type>, <v|a>, <str_initialized|>)
 Dim StringTable:Set StringTable = CreateObject("Scripting.Dictionary")
 Dim NumParams
+
+Dim ClassST:Set ClassST = CreateObject("Scripting.Dictionary")
+'<Name> :: Array(InstanceSize,Array(..Properties..),Array(..Methods..))
+
+Class PropertyDeclaration
+	Dim Name
+	Dim Index
+	Dim DataType
+	Dim str_initialized
+End Class
+
+Class MethodDeclatation
+	Dim Name
+	Dim argnumber
+	Dim returntype
+End Class
 
 Dim CharLib,CounterLib,ValueLib,TextLib
 
@@ -23,10 +39,12 @@ KWList = Array(	"IF","THEN","ELSEIF","ELSE","ENDIF","WHILE","LOOP","DIM",_
 		"GLOBAL","ENDGLOBAL","MAIN","ENDMAIN","DO","LOOP",_
 		"REPEAT","UNTIL","BREAK","SELECT","CASE","ENDSELECT",_
 		"SUB","ENDSUB","RETURN","END","GOTO","INT","STR",_
-		"OR","XOR","AND","NOT","CALL","INIT","ENDINIT")
-Dim KWCode:KWCode=Array("x","i","t","y","l","e","w","e","d","g","e","m",_
-			"e","p","e","r","e","b","s","c","e","u","e","f",_
-			"E","G","INT","STR","o","X","a","n","C","init","e")
+		"OR","XOR","AND","NOT","CALL","INIT","ENDINIT","METADATA",_
+		"ENDMETADATA","ENUMERATION","ENDENUMERATION","CLASS","ENDCLASS",_
+		"PROPERTY","METHOD","ENDMETHOD","SET")
+Dim EndKeywords:EndKeywords = "|ENDINIT|ENDMAIN|" &_
+		"LOOP|UNTIL|ENDIF|ENDSELECT|ENDSUB|CASE|" &_
+		"ELSE|ELSEIF|ENDMETHOD|"
 
 '---------------------------------------------------------------------
 'Constants Declarations
@@ -42,9 +60,9 @@ Dim CodeOutput,DataOutput,RessourceOutput
 Dim Look, Token, Value
 
 Dim StreamPos	'Current Position in stream
-Dim Text	'Input Stream
+Dim Text		'Input Stream
 
-Dim LCount	'Generated Labels Count
+Dim LCount		'Generated Labels Count
 
 '---------------------------------------------------------------------
 'Main Code
@@ -218,7 +236,7 @@ Function IsOrop(c)
 End Function
 
 Function IsRelop(c)
-	If c = "=" Or c = "<" Or c = ">" Then
+	If c = "=" Or c = "<" Or c = ">" Or c = "!" Then
 		IsRelop = True
 	Else
 		IsRelop = False
@@ -272,18 +290,6 @@ Sub SkipString(terminator_type)
 	Loop
 End Sub
 
-Function Lookup(table,s,n)
-	Dim found:found = False
-	Do While (n >= 0) And Not Found
-		If s = table(n) Then
-			Found = True
-		Else
-			n = n - 1
-		End If
-	Loop
-	Lookup = n
-End Function
-
 Function InTable(n)
 	InTable = ST.Exists(n)
 End Function
@@ -316,7 +322,7 @@ End Sub
 
 Sub GetNum
 	SkipWhite
-	Token = "#"
+	Token = "0"
 	Value = ""
 	If Not IsDigit(Look) Then Expected("Integer")
 	Do
@@ -390,12 +396,6 @@ Function SetAdditionalInfo(n,v)
 	End If
 End Function
 
-Sub Scan
-	If Token = "x" Then
-		Token = KWCode(Lookup(KWList,Value,UBound(KWList))+1)
-	End If
-End Sub
-
 Sub MatchString(x)
 	If Value <> x Then Expected(x)
 	Next1
@@ -429,6 +429,9 @@ Sub PreParseProcedures
 	If Value = "GLOBAL" Then SkipBlock("GLOBAL")
 	Do While Value = "ENUMERATION"
 		SkipBlock("ENUMERATION")
+	Loop
+	Do While Value = "CLASS"
+		SkipBlock("CLASS")
 	Loop
 	If Value = "INIT" Then SkipBlock("INIT")
 	SkipBlock("MAIN")
@@ -465,8 +468,7 @@ Sub RegisterProcedures
 		Next1
 		MatchString("(")
 		Do While Not Token = ")"
-			Scan
-			If Token = "STR" Or Token = "INT" Then
+			If Value = "STR" Or Value  = "INT" Then
 				Next1
 			End If
 			arr(2) = arr(2) + 1
@@ -480,8 +482,7 @@ Sub RegisterProcedures
 		MatchString(")")
 		If Token = ":" Then
 			MatchString(":")
-			Scan
-			If Not Token = "INT" And Not Token = "STR" Then
+			If Not Value = "INT" And Not Value = "STR" Then
 				Abort("Undefined type (" & Value & ")")
 			End If
 			arr(1) = Token
@@ -726,6 +727,8 @@ Sub Prog
 	WriteMetadata
 	TopDecls
 	Enumerations
+	JmpToMainCode
+	ClassDeclarations
 	InitBlock
 	MainBlock
 	Epilog
@@ -743,7 +746,6 @@ Sub WriteMetadata
 		MatchString("METADATA")
 		
 		Do While Value <> "ENDMETADATA"
-			'Value = "PRODUCTVERSION" Or Value = "ORIGINALFILENAME" Then
 			If Value = "ICON" Then
 				IconPresent = True
 				Next1
@@ -834,7 +836,50 @@ Sub Enumerations
 	Loop
 End Sub
 
+Sub JmpToMainCode
+	EmitLn("JMP Main")
+End Sub
+
+Sub ClassDeclarations
+	Do While Value = "CLASS"
+		MatchString("CLASS")
+		Do While Value <> "ENDCLASS"
+			If Value = "PROPERTY" Then
+				DeclareProperty
+			ElseIf Value = "METHOD" Then
+				DeclareMethod
+			ElseIf Value = "." Then
+				DoPass
+			Else
+				Expected("Property or method declaration")
+			End If
+		Loop
+		MatchString("ENDCLASS")
+	Loop
+End Sub
+
+Sub DeclareProperty
+	MatchString("PROPERTY")
+	If Value = "INT" Or Value = "STR" Then
+		Next1
+	End If
+	Next1
+End Sub
+
+Sub DeclareMethod
+	Dim n
+	MatchString("METHOD")
+	n = Value
+	Next1
+	MatchString("(")
+	'...
+	MatchString(")")
+	Block "",n
+	MatchString("ENDMETHOD")
+End Sub
+
 Sub InitBlock
+	PostLabel("Main")
 	If Value = "INIT" Then
 		MatchString("INIT")
 		Block "",""
@@ -914,6 +959,7 @@ Sub TopDecls
 					End If
 					t = "INT"
 				Loop
+				If Token = ";" Then MatchString(";")
 			ElseIf Value = "CONST" Then
 				MatchString("CONST")
 				If Value = "INT" Or Value = "STR" Then
@@ -947,10 +993,9 @@ Sub TopDecls
 					End If
 					t = "INT"
 				Loop
+				If Token = ";" Then MatchString(";")
 			Else
-				MatchString(".")
-				MatchString(".")
-				MatchString(".")
+				DoPass
 			End If
 		Loop
 		MatchString("ENDGLOBAL")
@@ -1138,21 +1183,20 @@ End Sub
 
 Sub Block(L,Ret)
 	Dim n
-	Scan
-	Do While Value <> "ELSE" And Token <> "e" And Token <> "c" And Token <> "y"
-		Select Case Token
+	Do While InStr(EndKeywords,"|"&Value&"|") = 0
+		Select Case Value
 			Case ";" :Semi
-			Case "i" :DoIf L,Ret
-			Case "s" :DoSelect L,Ret
-			Case "w" :DoWhile Ret
-			Case "p" :DoLoop Ret
-			Case "r" :DoRepeat Ret
-			Case "b" :DoBreak L
+			Case "IF" :DoIf L,Ret
+			Case "SELECT" :DoSelect L,Ret
+			Case "WHILE" :DoWhile Ret
+			Case "DO" :DoLoop Ret
+			Case "REPEAT" :DoRepeat Ret
+			Case "BREAK" :DoBreak L
 			Case "$" :InlineAsm
-			Case "f" :DoReturn(Ret)
-			Case "E" :DoEnd
-			Case "G" :DoGoto
-			Case "C" :DoCall
+			Case "RETURN" :DoReturn(Ret)
+			Case "END" :DoEnd
+			Case "GOTO" :DoGoto
+			Case "CALL" :DoCall
 			Case "." :DoPass
 			Case Else:
 				n = Value
@@ -1177,7 +1221,6 @@ Sub Block(L,Ret)
 				End If
 		End Select
 		Semi
-		Scan
 	Loop
 End Sub
 
@@ -1273,6 +1316,10 @@ Sub Factor
 		Else
 			Undefined(Value)
 		End If
+	ElseIf Token = "#" Then
+		MatchString("#")
+		LoadConst(Value)
+		Next1
 	ElseIf Token = "x" Then
 		n = Value
 		Next1
@@ -1298,7 +1345,7 @@ Sub Factor
 		Else
 			Undefined(n)
 		End If
-	ElseIf Token = "#" Then
+	ElseIf Token = "0" Then
 		LoadConst(Value)
 		Next1
 	Else
@@ -1308,7 +1355,7 @@ End Sub
 
 Sub NegFactor
 	MatchString("-")
-	If Token = "#" Then
+	If Token = "0" Then
 		LoadConst("-" & Value)
 		Next1
 	Else
@@ -1472,14 +1519,20 @@ Sub Relation
 		StringExpression
 		Push
 		Select Case Token
-			Case "="
-				StringEqual
+			Case "=":StringEqual
 			Case "<"
 				Next1
 				If Token = ">" Then
 					StringNotEqual
 				Else
 					Expected("String operator")
+				End If
+			Case "!"
+				MatchString("!")
+				If Token = "=" Then
+					StringNotEqual
+				Else
+					Expected("=")
 				End If
 			Case Else
 				Expected("String operator")
@@ -1492,6 +1545,13 @@ Sub Relation
 				Case "=":Equal
 				Case "<":Less
 				Case ">":Greater
+				Case "!"
+					MatchString("!")
+					If Token = "=" Then
+						NotEqual
+					Else
+						Expected("=")
+					End If
 			End Select
 		End If
 	End If
@@ -1531,7 +1591,6 @@ End Sub
 
 Sub BoolExpression
 	BoolTerm
-	Scan
 	Do While IsOrop(Token)
 		Push
 		Select Case Value
@@ -1540,7 +1599,6 @@ Sub BoolExpression
 			Case "~":BoolXor
 			Case "XOR":BoolXor
 		End Select
-		Scan
 	Loop
 End Sub
 
@@ -1783,18 +1841,16 @@ Sub DoIf(L,Ret)
 End Sub
 
 Sub DoSelect(L,Ret)
-	Dim Name,L1,L2,t
+	Dim L1,L2,t
 	MatchString("SELECT")
 	L1 = NewLabel
-	Name = Value
-	If IsParam(Value) Then
-		LoadParam(ParamNumber(Name))
-	Else
-		LoadVar(Name)
-	End If 
+	t = GetDataType(Value)
+	If t = "STR" Then
+		StringExpression
+	ElseIf t = "INT" Then
+		BoolExpression
+	End If
 	Push
-	t = GetDataType(Name)
-	Next1
 	Do While Value = "CASE"
 		MatchString("CASE")
 		If Value = "ELSE" Then
@@ -1813,8 +1869,6 @@ Sub DoSelect(L,Ret)
 		ElseIf t = "INT" Then
 			Expression
 			CompareTopOfStack
-		Else
-			Abort("Unexpected type of " & Name)
 		End If
 		L2 = NewLabel
 		BranchIfFalse(L2)
@@ -1887,8 +1941,14 @@ Sub DoEnd
 End Sub
 
 Sub DoGoto
+	Dim p:p = False
 	MatchString("GOTO")
+	If Token = "(" Then
+		MatchString("(")
+		p = True
+	End If
 	Branch("V_" & Value)
+	If p Then MatchString(")")
 	Next1
 End Sub
 
@@ -1896,8 +1956,8 @@ Sub DoPass
 	MatchString(".")
 	MatchString(".")
 	MatchString(".")
+	If Token = ";" Then MatchString(";")
 End Sub
-
 
 '---------------------------------------------------------------------
 '---------------------------------------------------------------------
@@ -1987,6 +2047,7 @@ Function LocDecls
 			LocDecl
 			n = n + 1
 		Loop
+		If Token = ";" Then MatchString(";")
 	Loop
 	LocDecls = n
 End Function

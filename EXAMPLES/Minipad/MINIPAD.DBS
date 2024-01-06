@@ -1,3 +1,13 @@
+\
+WORK IN PROGRESS
+*TODO:
+*String manipulation
+*command bar that tells the line
+*commands
+*fix hotkeys
+*dialogs
+\
+
 MetaData
 	icon: 'EXAMPLES\Minipad\minipad.ico'
 	FileDescription: 'DBasic notepad'
@@ -8,7 +18,7 @@ MetaData
 EndMetaData
 
 Global
-	Dim WindowID, EditID, MenuID
+	Dim WindowID, EditID, StatusBarID, MenuID
 	Dim FileMenuID, HelpMenuID, EditMenuID, CommandMenuID
 	
 	Dim STR FileName, INT Existing?, INT Modified?
@@ -19,15 +29,18 @@ Enumeration
 	MenuExit
 	MenuFind
 	MenuReplace
-	MenuTest
+	MenuSetCommands
+	MenuCommand1
+	MenuCommand2
+	MenuCommand3
 	MenuAbout
 EndEnumeration
 
-Enumeration
-	HotKeyCtrlA
-	HotKeyCtrlW
-	HotKeyCtrlS
-EndEnumeration
+\Enumeration
+*	HotKeyCtrlA
+*	HotKeyCtrlW
+*	HotKeyCtrlS
+*EndEnumeration\
 
 Main
 	Dim Event, test
@@ -65,7 +78,10 @@ Main
 	AppendMenu(WindowID,MenuID,EditMenuID,"Edit")
 		
 	CommandMenuID = CreateSubMenu()
-	AppendMenuItem(CommandMenuID,MenuTest,"Test")
+	AppendMenuItem(CommandMenuID,MenuSetCommands,"Set commands")
+	AppendMenuItem(CommandMenuID,MenuCommand1,"Command 1")
+	AppendMenuItem(CommandMenuID,MenuCommand2,"Command 2")
+	AppendMenuItem(CommandMenuID,MenuCommand3,"Command 3")
 	
 	AppendMenu(WindowID,MenuID,CommandMenuID,"Commands")
 	
@@ -74,13 +90,15 @@ Main
 	
 	AppendMenu(WindowID,MenuID,HelpMenuID,"Help")
 	
-	KeyboardShortcut(WindowID,HotkeyCtrlA,MOD_CTRL,KEY_A)
-	KeyboardShortcut(WindowID,HotkeyCtrlW,MOD_CTRL,KEY_W)
-	KeyboardShortcut(WindowID,HotkeyCtrlS,MOD_CTRL,KEY_S)
+	\KeyboardShortcut(WindowID,HotkeyCtrlA,MOD_CTRL,KEY_A)
+	*KeyboardShortcut(WindowID,HotkeyCtrlW,MOD_CTRL,KEY_W)
+	*KeyboardShortcut(WindowID,HotkeyCtrlS,MOD_CTRL,KEY_S)\
+	
+	StatusBarID = CreateStatusBar(WindowID)
+	SetComponentText(StatusBarID,"Ln 1, Col 1")
 	
 	Repeat
-		Event = HandleWindowEvents()
-	Until Event = 0
+	Until HandleWindowEvents() = 0
 	
 	CloseApplication()
 EndMain
@@ -88,21 +106,23 @@ EndMain
 Sub CloseApplication()
 	If Modified? Then
 		If Existing?
-			If MsgBox("This file has been modified. Do you want to save it ?","Warning",msgbox_warning+msgbox_yesno) = msgboxbutton_yes Then
+			If MsgBox('This file has been modified. Do you want to save it ?','Warning',msgbox_warning+msgbox_yesno) = msgboxbutton_yes Then
 				SaveFile()
 			EndIf
 			End()
 		Else
-			If MsgBox("You're about to close a file that doesn't exist. All the text you've written will be lost. Do you still want to exit ?","Warning",msgbox_warning+msgbox_yesno) = msgboxbutton_yes Then
+			If MsgBox("You're about to close a file that doesn't exist. All the text you've written will be lost. Do you still want to exit ?",'Warning',msgbox_warning+msgbox_yesno) = msgboxbutton_yes Then
 				End()
 			EndIf
 		EndIf
+	Else
+		End()
 	EndIf
 EndSub
 
 Sub SaveFile()
 	If !Existing? Then
-		MsgBox("This file does not exist","error",msgbox_error)
+		MsgBox('This file does not exist','error',msgbox_error)
 	Else
 		WriteFile(FileName,GetComponentText(EditID))
 		SetWindowTitle(WindowID,FileName)
@@ -111,11 +131,13 @@ Sub SaveFile()
 EndSub
 
 Sub WindowCallback(lparam,wparam,wmsg,hwnd) (stdcall)
+	SetComponentText(StatusBarID,"Ln " & CStrU(GetCursorLine(EditID)) & ", Col " & CStrU(GetCursorCol(EditID)))
 	Select wmsg
 		Case wm_destroy
 			PostQuitMessage(0)
 		Case wm_size
-			ResizeComponent(EditID, 0, 0, WindowWidth(WindowID) - 15, WindowHeight(WindowID) - 60)
+			ResizeComponent(EditID, 0, 0, WindowWidth(WindowID) - 15, WindowHeight(WindowID) - 80)
+			ResizeComponent(StatusBarID, WindowHeight(WindowID) - 20, 0, WindowWidth(WindowID), 20)
 		Case wm_command
 			Select wparam
 				Case MenuSave
@@ -123,24 +145,24 @@ Sub WindowCallback(lparam,wparam,wmsg,hwnd) (stdcall)
 				Case MenuExit
 					CloseApplication()
 				Case MenuAbout
-					msgbox("This is a Win32 notepad created with DBasic","About Minipad",msgbox_information)
+					msgbox('This is a Win32 notepad created with DBasic','About Minipad',msgbox_information)
 				Case EN_UPDATE * 65536 \EN_UPDATE is stored in the high word of the wparam\
 					If !Modified? Then
 						Modified? = True
-						SetWindowTitle(WindowID,"*" & FileName)
+						SetWindowTitle(WindowID,'*' & FileName)
 					EndIf
 			EndSelect
-		Case wm_hotkey
-			If GetActiveWindow() = hwnd Then
-				Select wparam
-					Case HotkeyCtrlA
-						SelectText(EditID,0,GetTextLength(EditID))
-					Case HotkeyCtrlW
-						CloseApplication()
-					Case HotKeyCtrlS
-						SaveFile()
-				EndSelect
-			EndIf
+		\Case wm_hotkey
+		*	If GetActiveWindow() = hwnd Then
+		*		Select wparam
+		*			Case HotkeyCtrlA
+		*				SelectText(EditID,0,GetTextLength(EditID))
+		*			Case HotkeyCtrlW
+		*				CloseApplication()
+		*			Case HotKeyCtrlS
+		*				SaveFile()
+		*		EndSelect
+		*	EndIf\
 		Case Else
 			return(DefaultMessageHandling(lparam,wparam,wmsg,hwnd))
 	EndSelect

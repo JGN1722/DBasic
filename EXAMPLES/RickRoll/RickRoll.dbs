@@ -1,0 +1,8 @@
+\
+	Description: Need I say more than the filename ?
+	Compile with: SUBPROCESS.LIBss
+\
+
+Main
+	Run('C:/Windows/System32/cmd.exe',' /c "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe" https://www.youtube.com/watch?v=dQw4w9WgXcQ')
+EndMain

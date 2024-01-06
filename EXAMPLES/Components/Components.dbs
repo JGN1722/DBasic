@@ -1,0 +1,134 @@
+\
+	Description: A demonstration of the GUI capabilities of DBasic
+	Compile with: WINDOW.LIB, CONVERT.LIB, IO.LIB
+	
+	Note: Copied on the design of the example program Gadget.pb delivered with PureBasic
+\
+
+Global
+	Const WinWidth = 410, WinHeight = 370
+	Dim WindowID, Button1ID, Button2ID, PanelID, QuitButtonID, StringID
+	Dim Tab1ID,ButtonAddID,ButtonRemoveID,ButtonSelectID
+	Dim ListBoxID, TrackBarID,ComboBoxID
+	Dim Tab2ID,ButtonInfoID,CheckBoxID
+	Dim Option1ID,Option2ID,Option3ID
+EndGlobal
+
+Main
+	Dim Event
+	Dim Top,ComponentHeight
+	Dim i;i = 0
+	WindowID = OpenWindow(100,200,WinWidth,WinHeight, "DBasic - Components Demonstration",@WindowCallback)
+	Top = 10
+	ComponentHeight = 24
+	
+	FrameComponent(WindowID,10,Top,370,290,"Player..."); Top += 20
+	
+	StringID = StringComponent(WindowID,20,Top,200,ComponentHeight,"")
+	Button1ID = ButtonComponent(WindowID, 223, Top,  72, ComponentHeight, "Play")
+	Button2ID = ButtonComponent(WindowID, 295, Top,  72, ComponentHeight, "Stop"); Top += 35
+	DisableComponent(Button2ID,DISABLED)
+	
+	ToolTipComponent(WindowID,Button1ID,"Play the current song")
+	
+	PanelID = PanelComponent(WindowID,20,Top,WinWidth-60,WinHeight-Top-80)
+	  AddComponentItem(PanelID,0,"MP3 PlayList")
+	  Tab1ID = WrapperComponent(WindowID,30,Top+30,WinWidth-80,WinHeight-Top-120)
+	    ListBoxID = ListBoxComponent(Tab1ID,6,10,230,148)
+	
+	    While i <= 30
+	      AddComponentItem(ListBoxID,i,"Music Song n° " & CStrU(i))
+	      i++
+	    Loop
+	    ButtonAddID = ButtonComponent(Tab1ID,250,10,80,24,"Add")
+	    ButtonRemoveID = ButtonComponent(Tab1ID,250,38,80,24,"Remove")
+	    ButtonSelectID = ButtonComponent(Tab1ID,250,66,80,24,"Select")
+	    ToolTipComponent(Tab1ID,ButtonSelectID,"Select the current song")
+	
+	    TrackBarID = TrackBarComponent(Tab1ID,10,160,310,25,0,100)
+	
+	  AddComponentItem(PanelID,1,"Options")
+	  Tab2ID = WrapperComponent(WindowID,30,Top+30,WinWidth-80,WinHeight-Top-120)
+	    CheckBoxComponent(Tab2ID,10,10,250,24,"Enable low-pass filter")
+	    CheckBoxID = CheckBoxComponent(Tab2ID,10,40,250,24,"Enable visual plug-in")
+	    ComboBoxID = ComboBoxComponent(Tab2ID,10,70,250,200)
+	      AddComponentItem(ComboBoxID,-1,"FireWorks")
+	      AddComponentItem(ComboBoxID,-1,"OpenGL spectrum")
+	      AddComponentItem(ComboBoxID,-1,"Bump bass")
+	    SetComponentState(ComboBoxID,0)
+	    DisableComponent(ComboBoxID,DISABLED)
+	
+	    Option1ID = FirstOptionComponent(Tab2ID,10,100,80,24,"640*480")
+	    Option2ID = OptionComponent(Tab2ID,10,120,80,24,"800*600")
+	    Option3ID = OptionComponent(Tab2ID,10,140,80,24,"1024*768")
+	    ClickOptionComponent(Option1ID)
+	
+	    ButtonInfoID = ButtonComponent(Tab2ID,150,140,80,24,"Info")
+	
+	TextComponent(WindowID, 10, WinHeight-60, 250, 24, "DBasic - Components demonstration")
+	QuitButtonID = ButtonComponent(WindowID, 270, WinHeight-65, 80, 24, "Quit")
+	
+	HideWindow(Tab2ID)
+	
+	Repeat
+		Event = HandleWindowEvents()
+	Until Event = 0
+EndMain
+
+Sub WindowCallback(lparam,wparam,wmsg,hwnd) (stdcall)
+	Select wmsg
+		Case #WM_DESTROY
+			PostQuitMessage(0)
+		Case #WM_COMMAND
+			Select lparam
+				Case Button1ID
+					DisableComponent(Button1ID,DISABLED)
+					DisableComponent(Button2ID,ENABLED)
+				Case Button2ID
+					DisableComponent(Button1ID,ENABLED)
+					DisableComponent(Button2ID,DISABLED)
+				Case ListBoxID
+					If wparam = #LBN_DBLCLK * 65536 Then
+						SetComponentText(StringID,GetComponentText(ListBoxID))
+					EndIf
+				Case ButtonAddID
+					AddComponentItem(ListBoxID,-1,"New Item Added...")
+				Case ButtonRemoveID
+					RemoveComponentItem(ListBoxID,GetComponentState(ListBoxID))
+				Case ButtonSelectID
+					SetComponentText(StringID,GetComponentText(ListBoxID))
+				Case QuitButtonID
+					End()
+				Case CheckBoxID
+					DisableComponent(ComboBoxID,GetComponentState(CheckBoxID))
+				Case ButtonInfoID
+					If GetComponentState(Option1ID) Then
+						MsgBox(GetComponentText(Option1ID),"Info",)
+					ElseIf GetComponentState(Option2ID) Then
+						MsgBox(GetComponentText(Option2ID),"Info",)
+					ElseIf GetComponentState(Option3ID) Then
+						MsgBox(GetComponentText(Option3ID),"Info",)
+					EndIf
+			EndSelect
+		Case #WM_NOTIFY
+			If GetNotificationSender(lparam) = PanelID Then
+				If GetNotificationCode(lparam) = #TCN_SELCHANGE Then
+					If GetComponentState(PanelID) = 0 Then
+						ShowWindow(Tab1ID)
+						HideWindow(Tab2ID)
+					Else
+						HideWindow(Tab1ID)
+						ShowWindow(Tab2ID)
+					EndIf
+				EndIf
+			ElseIf GetNotificationSender(lparam) = TrackBarID Then
+				If GetNotificationCode(lparam) <> #NM_CUSTOMDRAW
+					SetComponentText(StringID,CStrU(GetComponentState(TrackBarID)))
+				EndIf
+			EndIf
+		Case #WM_GETMINMAXINFO
+			SetWindowBounds(lparam,WinWidth,WinHeight,WinWidth,WinHeight)
+		Case Else
+			return(DefaultMessageHandling(lparam,wparam,wmsg,hwnd))
+	EndSelect
+EndSub

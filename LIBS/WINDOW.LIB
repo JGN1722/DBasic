@@ -1,11 +1,5 @@
-;$CONST WM_CREATE = 1
-;$CONST WM_DESTROY = 2
-;$CONST WM_SIZE = 5
-;$CONST WM_QUIT = 18
-;$CONST WM_COMMAND = 273
-;$CONST WM_HOTKEY = 786
-
-;$CONST EN_UPDATE = 1024
+;$CONST ENABLED = 1
+;$CONST DISABLED = 0
 
 ;$CONST MOD_ALT = 1
 ;$CONST MOD_CTRL = 2
@@ -39,8 +33,27 @@
 ;$CONST KEY_Y = 89
 ;$CONST KEY_Z = 90
 
-window_class db 'WNDCLASS',0
+user_class_number dd 0
 edit_class db 'EDIT',0
+button_class db 'Button',0
+static_class db 'STATIC',0
+listbox_class db 'ListBox',0
+statusbar_class db 'msctls_statusbar32',0
+trackbar_class db 'msctls_trackbar32',0
+tooltip_class db 'tooltips_class32',0
+panel_class db 'SysTabControl32',0
+combobox_class db 'ComboBox',0
+EDIT_CLS = 0
+BUTTON_CLS = 1
+STATIC_CLS = 2
+LISTBOX_CLS = 3
+STATUSBAR_CLS = 4
+TRACKBAR_CLS = 5
+TOOLTIP_CLS = 6
+PANEL_CLS = 7
+COMBOBOX_CLS = 8
+RADIOBUTTON_CLS = 9
+_cls db 'cls_name',0
 msg MSG
 
 ;$SUB OPENWINDOW(X,Y,WIDTH,HEIGHT,TITLE,CALLBACK_PROC)
@@ -61,15 +74,120 @@ V_OPENWINDOW:
 	MOV eax, DWORD [ebp + 8]
 	MOV DWORD [edi + 4], eax
 	MOV DWORD [edi + 28], COLOR_BTNFACE+1
-	MOV DWORD [edi + 36], window_class
+	
+	PUSH edi
+	PUSH DWORD [user_class_number]
+	CALL CSTR_windowlib_internal
+	ADD esp, 4
+	POP edi
+	MOV ebx, eax
+	
+	MOV DWORD [edi + 36], ebx
 	invoke RegisterClass, edi
-	invoke CreateWindowEx,0,window_class,DWORD [ebp + 12],WS_VISIBLE+WS_OVERLAPPEDWINDOW,DWORD [ebp + 28], DWORD [ebp + 24], DWORD [ebp + 16], DWORD [ebp + 20],NULL,NULL,DWORD [edi + 16],NULL
+	invoke CreateWindowEx,0,ebx,DWORD [ebp + 12],WS_VISIBLE+WS_OVERLAPPEDWINDOW,DWORD [ebp + 28], DWORD [ebp + 24], DWORD [ebp + 20], DWORD [ebp + 16],NULL,NULL,DWORD [edi + 16],NULL
 	
 	PUSH eax
 	SUB DWORD [ebp + 12], 4
 	invoke HeapFree,[hHeap],0,DWORD [ebp + 12]
 	invoke HeapFree,[hHeap],0,edi
+	invoke HeapFree,[hHeap],0,ebx
 	POP eax
+	
+	INC [user_class_number]
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+CSTR_windowlib_internal:
+	PUSH ebp
+	MOV ebp, esp
+	
+	SUB esp, 4
+	
+	MOV eax, DWORD [ebp + 8]
+	CMP eax, 9
+	JA @f
+	MOV eax, 3
+	JMP .allocate
+	@@:
+	CMP eax, 99
+	JA @f
+	MOV eax, 4
+	JMP .allocate
+	@@:
+	CMP eax, 999
+	JA @f
+	MOV eax, 5
+	JMP .allocate
+	@@:
+	CMP eax, 9999
+	JA @f
+	MOV eax, 6
+	JMP .allocate
+	@@:
+	CMP eax, 99999
+	JA @f
+	MOV eax, 7
+	JMP .allocate
+	@@:
+	CMP eax, 999999
+	JA @f
+	MOV eax, 8
+	JMP .allocate
+	@@:
+	CMP eax, 9999999
+	JA @f
+	MOV eax, 9
+	JMP .allocate
+	@@:
+	CMP eax, 99999999
+	JA @f
+	MOV eax, 10
+	JMP .allocate
+	@@:
+	CMP eax, 999999999
+	JA @f
+	MOV eax, 11
+	JMP .allocate
+	@@:
+	MOV eax, 12
+	
+	.allocate:
+	PUSH eax
+	invoke HeapAlloc,[hHeap],HEAP_ZERO_MEMORY,eax
+	
+	MOV DWORD [esp + 4], eax
+	MOV edi, eax
+	ADD edi, DWORD [esp]
+	SUB edi, 2
+	ADD esp, 4
+	
+	MOV eax, DWORD [ebp + 8]
+	MOV ebx, 10
+	
+	CMP eax, 10
+	JB @f
+	
+	.convert:
+	
+	XOR edx, edx
+	DIV ebx
+	
+	ADD dl, '0'
+	MOV BYTE [edi], dl
+	DEC edi
+	
+	CMP eax, 10
+	JA .convert
+	
+	@@:
+	ADD al, '0'
+	MOV BYTE [edi], al
+	MOV edi, DWORD [esp]
+	
+	POP eax
+	MOV BYTE [eax], 'W'
 	
 	MOV esp, ebp
 	POP ebp
@@ -85,6 +203,17 @@ V_HANDLEWINDOWEVENTS:
 	invoke DispatchMessage,msg
 	.finish:
 	POP eax
+	RET
+
+;$SUB CREATEMESSAGE() : INT
+V_CREATEMESSAGE:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke HeapAlloc,[hHeap],HEAP_ZERO_MEMORY,28
+	
+	MOV esp, ebp
+	POP ebp
 	RET
 
 ;$SUB POSTQUITMESSAGE(CODE)
@@ -162,6 +291,39 @@ V_WINDOWHEIGHT:
 	PUSH eax
 	invoke HeapFree,[hHeap],0,ebx
 	POP eax
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB SETWINDOWBOUNDS(MINMAXINFO,MINX,MINY,MAXX,MAXY)
+V_SETWINDOWBOUNDS:
+	PUSH ebp
+	MOV ebp, esp
+	
+	MOV ebx, DWORD [ebp + 12]
+	MOV ecx, DWORD [ebp + 8]
+	
+	MOV eax, DWORD [ebp + 24]
+	MOV DWORD [eax + 32], ebx
+	MOV DWORD [eax + 36], ecx
+	
+	MOV ebx, DWORD [ebp + 20]
+	MOV ecx, DWORD [ebp + 16]
+	
+	MOV DWORD [eax + 24], ebx
+	MOV DWORD [eax + 28], ecx
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB SETWINDOWSIZE(WINDOWID,WIDTH,HEIGHT)
+V_SETWINDOWSIZE:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke SetWindowPos,DWORD [ebp + 16],NULL,0,0,DWORD [ebp + 12],DWORD [ebp + 8],SWP_NOMOVE
 	
 	MOV esp, ebp
 	POP ebp
@@ -246,8 +408,65 @@ V_KEYBOARDSHORTCUT:
 	POP ebp
 	RET
 
-;$SUB SELECTTEXT(CONTROLID,STARTING,ENDING)
-V_SELECTTEXT:
+;$SUB DISABLECOMPONENT(ID,STATE)
+V_DISABLECOMPONENT:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke EnableWindow,DWORD [ebp + 12],DWORD [ebp + 8]
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB SHOWWINDOW(ID)
+V_SHOWWINDOW:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke ShowWindow,DWORD [ebp + 8],SW_SHOW
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB HIDEWINDOW(ID)
+V_HIDEWINDOW:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke ShowWindow,DWORD [ebp + 8],SW_HIDE
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB GETNOTIFICATIONSENDER(NMHDR) : INT
+V_GETNOTIFICATIONSENDER:
+	PUSH ebp
+	MOV ebp, esp
+	
+	MOV eax, DWORD [ebp + 8]
+	MOV eax, DWORD [eax]
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB GETNOTIFICATIONCODE(NOTIFICATION) : INT
+V_GETNOTIFICATIONCODE:
+	PUSH ebp
+	MOV ebp, esp
+	
+	MOV eax, DWORD [ebp + 8]
+	MOV eax, DWORD [eax + 8]
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB SELECTEDITTEXT(CONTROLID,STARTING,ENDING)
+V_SELECTEDITTEXT:
 	PUSH ebp
 	MOV ebp, esp
 	
@@ -268,6 +487,514 @@ V_GETTEXTLENGTH:
 	POP ebp
 	RET
 
+;$SUB GETACTIVEWINDOW() : INT
+V_GETACTIVEWINDOW:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke GetForegroundWindow
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB CREATESTATUSBAR(WINDOWID) : INT
+V_CREATESTATUSBAR:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke GetModuleHandle,0
+	invoke CreateWindowEx,0,statusbar_class,0,SBARS_SIZEGRIP+WS_VISIBLE+WS_CHILD,0,0,0,0,DWORD[ebp + 8],0,eax,NULL
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB SENDMESSAGE(WINDOWID,MESSAGE,WPARAM,LPARAM)
+V_SENDMESSAGE:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke SendMessage,DWORD [ebp + 20],DWORD [ebp + 16],DWORD [ebp + 12],DWORD [ebp + 8]
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB GETCURSORLINE(EDITID) : INT
+V_GETCURSORLINE:
+	PUSH ebp
+	MOV ebp, esp
+	
+	SUB esp, 4
+	MOV ebx, esp
+	invoke SendMessage,DWORD [ebp + 8],EM_GETSEL,ebx,NULL
+	invoke SendMessage,DWORD [ebp + 8],EM_LINEFROMCHAR,DWORD [ebx],NULL
+	ADD eax, 1
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB GETCURSORCOL(EDITID) : INT
+V_GETCURSORCOL:
+	PUSH ebp
+	MOV ebp, esp
+	
+	SUB esp, 4
+	MOV ebx, esp
+	invoke SendMessage,DWORD [ebp + 8],EM_GETSEL,ebx,NULL
+	invoke SendMessage,DWORD [ebp + 8],EM_LINEFROMCHAR,DWORD [ebx],NULL
+	invoke SendMessage,DWORD [ebp + 8],EM_LINEINDEX,eax,NULL
+	SUB DWORD [ebx], eax
+	MOV eax, DWORD [ebx]
+	INC eax
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB FRAMECOMPONENT(WINDOWID,X,Y,WIDTH,HEIGHT,TITLE) : INT
+V_FRAMECOMPONENT:
+	PUSH ebp
+	MOV ebp, esp
+	
+	ADD DWORD [ebp + 8], 4
+	invoke GetModuleHandle,0
+	invoke CreateWindowEx,WS_EX_TRANSPARENT,button_class,DWORD [ebp + 8],WS_CHILD+WS_GROUP+WS_VISIBLE+7,DWORD [ebp + 24],DWORD [ebp + 20],DWORD [ebp + 16],DWORD [ebp + 12],DWORD [ebp + 28],0,eax,NULL
+	SUB DWORD [ebp + 8], 4
+	PUSH eax
+	invoke HeapFree,[hHeap],0,DWORD [ebp + 8]
+	MOV eax, DWORD [esp]
+	invoke SetProp,eax,_cls,BUTTON_CLS
+	POP eax
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB STRINGCOMPONENT(WINDOWID,X,Y,WIDTH,HEIGHT,TITLE) : INT
+V_STRINGCOMPONENT:
+	PUSH ebp
+	MOV ebp, esp
+	
+	ADD DWORD [ebp + 8], 4
+	invoke GetModuleHandle,0
+	invoke CreateWindowEx,WS_EX_CLIENTEDGE,edit_class,DWORD [ebp + 8],WS_CHILD+WS_GROUP+WS_TABSTOP+WS_VISIBLE+80,DWORD [ebp + 24],DWORD [ebp + 20],DWORD [ebp + 16],DWORD [ebp + 12],DWORD [ebp + 28],0,eax,NULL
+	SUB DWORD [ebp + 8], 4
+	PUSH eax
+	invoke HeapFree,[hHeap],0,DWORD [ebp + 8]
+	MOV eax, DWORD [esp]
+	invoke SetProp,eax,_cls,EDIT_CLS
+	POP eax
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB BUTTONCOMPONENT(WINDOWID,X,Y,WIDTH,HEIGHT,TITLE) : INT
+V_BUTTONCOMPONENT:
+	PUSH ebp
+	MOV ebp, esp
+	
+	ADD DWORD [ebp + 8], 4
+	
+	invoke GetModuleHandle,0
+	invoke CreateWindowEx,0,button_class,DWORD [ebp + 8],WS_CHILD+WS_GROUP+WS_TABSTOP+WS_VISIBLE,DWORD [ebp + 24],DWORD [ebp + 20],DWORD [ebp + 16],DWORD [ebp + 12],DWORD [ebp + 28],0,eax,NULL
+	
+	PUSH eax
+	SUB DWORD [ebp + 8], 4
+	invoke HeapFree,[hHeap],0,DWORD [ebp + 8]
+	
+	MOV eax, DWORD [esp]
+	invoke SetProp,eax,_cls,BUTTON_CLS
+	POP eax
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB TOOLTIPCOMPONENT(WINDOWID,ID,TEXT) : INT
+V_TOOLTIPCOMPONENT:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke GetModuleHandle,0
+	invoke CreateWindowEx,WS_EX_TOPMOST,tooltip_class,0,WS_POPUP+TTS_ALWAYSTIP,CW_USEDEFAULT,CW_USEDEFAULT,CW_USEDEFAULT,CW_USEDEFAULT,0,0,eax,NULL
+	PUSH eax
+	
+	invoke HeapAlloc,[hHeap],HEAP_ZERO_MEMORY,sizeof.TOOLINFO
+	MOV edx, DWORD [ebp + 16]
+	MOV ecx, DWORD [ebp + 8]
+	MOV ebx, DWORD [ebp + 12]
+	ADD ecx, 4
+	MOV DWORD [eax+TOOLINFO.cbSize], sizeof.TOOLINFO
+	MOV DWORD [eax+TOOLINFO.hwnd], edx
+	MOV DWORD [eax+TOOLINFO.uFlags], TTF_IDISHWND+TTF_SUBCLASS
+	MOV DWORD [eax+TOOLINFO.uId], ebx
+	MOV DWORD [eax+TOOLINFO.lpszText], ecx
+	
+	PUSH eax
+	invoke SendMessage,DWORD [esp + 16], TTM_ADDTOOL, 0, DWORD [esp]
+	
+	invoke HeapFree,[hHeap],0,DWORD [esp]
+	invoke HeapFree,[hHeap],0,DWORD [ebp + 8]
+	MOV eax, DWORD [esp + 4]
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB TEXTCOMPONENT(WINDOWID,X,Y,WIDTH,HEIGHT,TEXT) : INT
+V_TEXTCOMPONENT:
+	PUSH ebp
+	MOV ebp, esp
+	
+	ADD DWORD [ebp + 8], 4
+	invoke GetModuleHandle,0
+	invoke CreateWindowEx,0,static_class,DWORD [ebp + 8],WS_CHILD+WS_TABSTOP+WS_VISIBLE,DWORD [ebp + 24],DWORD [ebp + 20],DWORD [ebp + 16],DWORD [ebp + 12],DWORD [ebp + 28],0,eax,NULL
+	SUB DWORD [ebp + 8], 4
+	PUSH eax
+	invoke HeapFree,[hHeap],0,DWORD [ebp + 8]
+	MOV eax, DWORD [esp]
+	invoke SetProp,eax,_cls,STATIC_CLS
+	POP eax
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB WRAPPERCOMPONENT(WINDOWID,X,Y,WIDTH,HEIGHT) : INT
+V_WRAPPERCOMPONENT:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke GetModuleHandle,0
+	invoke CreateWindowEx,WS_EX_TRANSPARENT,static_class,0,WS_CHILD+WS_GROUP+WS_TABSTOP+WS_VISIBLE ,DWORD [ebp + 20],DWORD [ebp + 16],DWORD [ebp + 12],DWORD [ebp + 8],DWORD [ebp + 24],0,eax,NULL
+	PUSH eax
+	
+	invoke SetWindowLong,eax,-4,.NewWindowProc
+	MOV ebx, DWORD [esp]
+	invoke SetWindowLong,ebx,-12,eax
+	
+	MOV eax, DWORD [esp]
+	invoke SetProp,eax,_cls,STATIC_CLS
+	
+	POP eax
+	MOV esp, ebp
+	POP ebp
+	RET
+	.NewWindowProc:
+	PUSH ebp
+	MOV ebp, esp
+	
+	PUSH ebx
+	PUSH esi
+	PUSH edi
+	
+	CMP DWORD [ebp + 12], WM_NOTIFY
+	JE .Forward
+	CMP DWORD [ebp + 12], WM_COMMAND
+	JNE .CallOldWndProc
+	
+	.Forward:
+	;forward the WM_COMMAND messages and WM_NOTIFY
+	invoke GetParent,DWORD [ebp + 8]
+	invoke SendMessage,eax,DWORD [ebp + 12],DWORD [ebp + 16],DWORD [ebp + 20]
+	
+	.CallOldWndProc:
+	invoke GetWindowLong,DWORD [ebp + 8],-12
+	invoke CallWindowProc,eax,DWORD [ebp + 8],DWORD [ebp + 12],DWORD [ebp + 16],DWORD [ebp + 20]
+	
+	.finish:
+	
+	POP edi
+	POP esi
+	POP ebx
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB PANELCOMPONENT(WINDOWID,X,Y,WIDTH,HEIGHT) : INT
+V_PANELCOMPONENT:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke GetModuleHandle,0
+	invoke CreateWindowEx,0,panel_class,NULL,WS_CHILD+WS_GROUP+WS_TABSTOP+WS_VISIBLE,DWORD [ebp + 20],DWORD [ebp + 16],DWORD [ebp + 12],DWORD [ebp + 8],DWORD [ebp + 24],0,eax,NULL
+	
+	PUSH eax
+	MOV eax, DWORD [esp]
+	invoke SetProp,eax,_cls,PANEL_CLS
+	POP eax
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB LISTBOXCOMPONENT(WINDOWID,X,Y,WIDTH,HEIGHT) : INT
+V_LISTBOXCOMPONENT:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke GetModuleHandle,0
+	invoke CreateWindowEx,WS_EX_STATICEDGE,listbox_class,0,WS_CHILD+WS_TABSTOP+WS_VISIBLE+WS_VSCROLL+LBS_NOTIFY,DWORD [ebp + 20],DWORD [ebp + 16],DWORD [ebp + 12],DWORD [ebp + 8],DWORD [ebp + 24],0,eax,NULL
+	PUSH eax
+	MOV eax, DWORD [esp]
+	invoke SetProp,eax,_cls,LISTBOX_CLS
+	POP eax
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB GETLISTBOXITEM(LISTBOXID,INDEX) : STR
+V_GETLISTBOXITEM:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke SendMessage,DWORD [ebp + 12],LB_GETTEXTLEN,DWORD [ebp + 8],0
+	PUSH eax
+	ADD eax, 5
+	invoke HeapAlloc,[hHeap],HEAP_ZERO_MEMORY,eax
+	POP ecx
+	MOV DWORD [eax], ecx
+	PUSH eax
+	ADD eax, 4
+	invoke SendMessage,DWORD [ebp + 12],LB_GETTEXT,DWORD [ebp + 8],eax
+	POP eax
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB CHECKBOXCOMPONENT(WINDOWID,X,Y,WIDTH,HEIGHT,TITLE) : INT
+V_CHECKBOXCOMPONENT:
+	PUSH ebp
+	MOV ebp, esp
+	
+	ADD DWORD [ebp + 8], 4
+	invoke GetModuleHandle,0
+	invoke CreateWindowEx,0,button_class,DWORD [ebp + 8],WS_CHILD+WS_GROUP+WS_TABSTOP+WS_VISIBLE+3,DWORD [ebp + 24],DWORD [ebp + 20],DWORD [ebp + 16],DWORD [ebp + 12],DWORD [ebp + 28],0,eax,0
+	SUB DWORD [ebp + 8], 4
+	
+	PUSH eax
+	invoke HeapFree,[hHeap],0,DWORD [ebp + 8]
+	MOV eax, DWORD [esp]
+	invoke SetProp,eax,_cls,BUTTON_CLS
+	POP eax
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB FIRSTOPTIONCOMPONENT(WINDOWID,X,Y,WIDTH,HEIGHT,TITLE) : INT
+V_FIRSTOPTIONCOMPONENT:
+	PUSH ebp
+	MOV ebp, esp
+	
+	ADD DWORD [ebp + 8], 4
+	invoke GetModuleHandle,0
+	invoke CreateWindowEx,0,button_class,DWORD [ebp + 8],WS_CHILD+WS_GROUP+WS_TABSTOP+WS_VISIBLE+9,DWORD [ebp + 24],DWORD [ebp + 20],DWORD [ebp + 16],DWORD [ebp + 12],DWORD [ebp + 28],0,eax,0
+	PUSH eax
+	SUB DWORD [ebp + 8], 4
+	invoke HeapFree,[hHeap],0,DWORD [ebp + 8]
+	MOV eax, DWORD [esp]
+	invoke SetProp,eax,_cls,BUTTON_CLS
+	POP eax
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB OPTIONCOMPONENT(WINDOWID,X,Y,WIDTH,HEIGHT,TITLE) : INT
+V_OPTIONCOMPONENT:
+	PUSH ebp
+	MOV ebp, esp
+	
+	ADD DWORD [ebp + 8], 4
+	invoke GetModuleHandle,0
+	invoke CreateWindowEx,0,button_class,DWORD [ebp + 8],WS_CHILD+WS_TABSTOP+WS_VISIBLE+9,DWORD [ebp + 24],DWORD [ebp + 20],DWORD [ebp + 16],DWORD [ebp + 12],DWORD [ebp + 28],0,eax,0
+	PUSH eax
+	SUB DWORD [ebp + 8], 4
+	invoke HeapFree,[hHeap],0,DWORD [ebp + 8]
+	MOV eax, DWORD [esp]
+	invoke SetProp,eax,_cls,BUTTON_CLS
+	POP eax
+		
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB CLICKOPTIONCOMPONENT(OPTIONID) : INT
+V_CLICKOPTIONCOMPONENT:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke SendMessage,DWORD [ebp +  8],BM_CLICK,0,0
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB TRACKBARCOMPONENT(WINDOWID,X,Y,WIDTH,HEIGHT,MIN,MAX) : INT
+V_TRACKBARCOMPONENT:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke GetModuleHandle,0
+	invoke CreateWindowEx,0,trackbar_class,0,WS_CHILD+WS_TABSTOP+WS_VISIBLE,DWORD [ebp + 28],DWORD [ebp + 24],DWORD [ebp + 20],DWORD [ebp + 16],DWORD [ebp + 32],0,eax,0
+	
+	PUSH eax
+	MOV ebx, DWORD [ebp + 8]
+	SHL ebx, 16
+	ADD ebx, DWORD [ebp +12]
+	invoke SendMessage,eax,TBM_SETRANGE,0,ebx
+	MOV eax, DWORD [esp]
+	invoke SetProp,eax,_cls,TRACKBAR_CLS
+	POP eax
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB COMBOBOXCOMPONENT(WINDOWID,X,Y,WIDTH,HEIGHT) : INT
+V_COMBOBOXCOMPONENT:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke GetModuleHandle,0
+	invoke CreateWindowEx,0,combobox_class,0,WS_CHILD+WS_GROUP+WS_VISIBLE+WS_TABSTOP+WS_VSCROLL+WS_BORDER+CBS_DROPDOWNLIST,DWORD [ebp + 20],DWORD [ebp + 16],DWORD [ebp + 12],DWORD [ebp + 8],DWORD [ebp + 24],0,eax,0
+	PUSH eax
+	MOV eax, DWORD [esp]
+	invoke SetProp,eax,_cls,COMBOBOX_CLS
+	POP eax
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB GETCOMPONENTSTATE(COMPONENTID) : INT
+V_GETCOMPONENTSTATE:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke GetProp,DWORD [ebp + 8],_cls
+	CMP eax, BUTTON_CLS
+	JNE @f
+	invoke SendMessage,DWORD [ebp + 8],BM_GETCHECK,0,0
+	JMP .finish
+	@@:
+	CMP eax, LISTBOX_CLS
+	JNE @f
+	invoke SendMessage,DWORD [ebp + 8],LB_GETCURSEL,0,0
+	JMP .finish
+	@@:
+	CMP eax, PANEL_CLS
+	JNE @f
+	invoke SendMessage,DWORD [ebp + 8],TCM_GETCURSEL,0,0
+	JMP .finish
+	@@:
+	CMP eax, TRACKBAR_CLS
+	JNE @f
+	invoke SendMessage,DWORD [ebp + 8],TBM_GETPOS,0,0
+	JMP .finish
+	@@:
+	
+	.finish:
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB SETCOMPONENTSTATE(COMPONENTID,STATE) : INT
+V_SETCOMPONENTSTATE:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke GetProp,DWORD [ebp + 12],_cls
+	CMP eax, COMBOBOX_CLS
+	JNE @f
+	invoke SendMessage,DWORD [ebp + 12],CB_SETCURSEL,DWORD [ebp + 8],0
+	JMP .finish
+	@@:
+	CMP eax, LISTBOX_CLS
+	JNE @f
+	invoke SendMessage,DWORD [ebp + 12],LB_SETCURSEL,DWORD [ebp + 8],0
+	JMP .finish
+	@@:
+	CMP eax, BUTTON_CLS
+	JNE @f
+	;...
+	JMP .finish
+	@@:
+	
+	.finish:
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB ADDCOMPONENTITEM(COMPONENTID,INDEX,TEXT)
+V_ADDCOMPONENTITEM:
+	PUSH ebp
+	MOV ebp, esp
+	
+	ADD DWORD [ebp + 8], 4
+	
+	invoke GetProp,DWORD [ebp + 16],_cls
+	CMP eax, PANEL_CLS
+	JNE @f
+	invoke HeapAlloc,[hHeap],HEAP_ZERO_MEMORY,28
+	MOV edx, DWORD [ebp + 8]
+	MOV DWORD [eax], TCIF_TEXT
+	MOV DWORD [eax+12], edx
+	
+	PUSH eax
+	invoke SendMessage,DWORD [ebp + 16],TCM_INSERTITEM,DWORD [ebp + 12],eax
+	POP eax
+	invoke HeapFree,[hHeap],0,eax
+	JMP .finish
+	@@:
+	CMP eax, COMBOBOX_CLS
+	JNE @f
+	invoke SendMessage,DWORD [ebp + 16],CB_ADDSTRING,DWORD [ebp + 12],DWORD [ebp + 8]
+	JMP .finish
+	@@:
+	CMP eax, LISTBOX_CLS
+	JNE @f
+	invoke SendMessage,DWORD [ebp + 16],LB_INSERTSTRING,DWORD [ebp + 12],DWORD [ebp + 8]
+	JMP .finish
+	@@:
+	
+	.finish:
+	SUB DWORD [ebp + 8], 4
+	invoke HeapFree,[hHeap],0,DWORD [ebp + 8]
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB REMOVECOMPONENTITEM(COMPONENT,INDEX)
+V_REMOVECOMPONENTITEM:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke GetProp,DWORD [ebp + 12],_cls
+	CMP eax, LISTBOX_CLS
+	JNE @f
+	invoke SendMessage,DWORD [ebp + 12],LB_DELETESTRING,DWORD [ebp + 8],0
+	JMP .finish
+	@@:
+	CMP eax, COMBOBOX_CLS
+	JNE @f
+	invoke SendMessage,DWORD [ebp + 12],CB_DELETESTRING,DWORD [ebp + 8],0
+	JMP .finish
+	@@:
+	
+	.finish:
+	MOV esp, ebp
+	POP ebp
+	RET
+
 ;$SUB SETWINDOWTITLE(WINDOWID,TITLE)
 ;$SUB SETCOMPONENTTEXT(ID,TEXT)
 V_SETWINDOWTITLE:
@@ -278,18 +1005,36 @@ V_SETCOMPONENTTEXT:
 	ADD DWORD [ebp + 8], 4
 	invoke SetWindowText,DWORD [ebp + 12],DWORD [ebp + 8]
 	SUB DWORD [ebp + 8], 4
-	invoke HeapFree,[hHeap],HEAP_ZERO_MEMORY,DWORD [ebp + 8]
+	invoke HeapFree,[hHeap],0,DWORD [ebp + 8]
 	
 	MOV esp, ebp
 	POP ebp
 	RET
 
-db 'GETCOMPONENTTEXT',0
 ;$SUB GETCOMPONENTTEXT(ID) : STR
 V_GETCOMPONENTTEXT:
 	PUSH ebp
 	MOV ebp, esp	
 	
+	invoke GetProp,DWORD [ebp + 8],_cls
+	CMP eax, LISTBOX_CLS
+	JNE @f
+	
+	invoke SendMessage,DWORD [ebp + 8],LB_GETCURSEL,0,0
+	MOV ebx, eax
+	invoke SendMessage,DWORD [ebp + 8],LB_GETTEXTLEN,ebx,0
+	PUSH eax
+	ADD eax, 5
+	invoke HeapAlloc,[hHeap],HEAP_ZERO_MEMORY,eax
+	POP ecx
+	MOV DWORD [eax], ecx
+	PUSH eax
+	ADD eax, 4
+	invoke SendMessage,DWORD [ebp + 8],LB_GETTEXT,ebx,eax
+	POP eax
+	
+	JMP .finish
+	@@:
 	invoke GetWindowTextLength,DWORD [ebp + 8]
 	PUSH eax
 	ADD eax, 5
@@ -302,17 +1047,7 @@ V_GETCOMPONENTTEXT:
 	invoke GetWindowText,DWORD [ebp + 8],eax,ecx
 	POP eax
 	
-	MOV esp, ebp
-	POP ebp
-	RET
-
-;$SUB GETACTIVEWINDOW() : INT
-V_GETACTIVEWINDOW:
-	PUSH ebp
-	MOV ebp, esp
-	
-	invoke GetForegroundWindow
-	
+	.finish:
 	MOV esp, ebp
 	POP ebp
 	RET

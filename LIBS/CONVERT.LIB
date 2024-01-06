@@ -1,5 +1,5 @@
-;$SUB CINT(STRING) : INT
-V_CINT:
+;$SUB CINTU(STRING) : INT
+V_CINTU:
 	PUSH ebp
 	MOV ebp, esp
 	
@@ -19,6 +19,104 @@ V_CINT:
 	invoke HeapFree,[hHeap],HEAP_ZERO_MEMORY,DWORD [ebp + 8]
 	POP eax
 	 
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB CSTRU(VALUE) : STR
+V_CSTRU:
+	PUSH ebp
+	MOV ebp, esp
+	
+	SUB esp, 4
+	
+	MOV eax, DWORD [ebp + 8]
+	CMP eax, 9
+	JA @f
+	MOV eax, 6
+	JMP .allocate
+	@@:
+	CMP eax, 99
+	JA @f
+	MOV eax, 7
+	JMP .allocate
+	@@:
+	CMP eax, 999
+	JA @f
+	MOV eax, 8
+	JMP .allocate
+	@@:
+	CMP eax, 9999
+	JA @f
+	MOV eax, 9
+	JMP .allocate
+	@@:
+	CMP eax, 99999
+	JA @f
+	MOV eax, 10
+	JMP .allocate
+	@@:
+	CMP eax, 999999
+	JA @f
+	MOV eax, 11
+	JMP .allocate
+	@@:
+	CMP eax, 9999999
+	JA @f
+	MOV eax, 12
+	JMP .allocate
+	@@:
+	CMP eax, 99999999
+	JA @f
+	MOV eax, 13
+	JMP .allocate
+	@@:
+	CMP eax, 999999999
+	JA @f
+	MOV eax, 14
+	JMP .allocate
+	@@:
+	MOV eax, 15
+	
+	.allocate:
+	PUSH eax
+	invoke HeapAlloc,[hHeap],HEAP_ZERO_MEMORY,eax
+	
+	MOV DWORD [esp + 4], eax
+	XOR ecx, ecx
+	MOV edi, eax
+	ADD edi, DWORD [esp]
+	SUB edi, 2
+	ADD esp, 4
+	
+	MOV eax, DWORD [ebp + 8]
+	MOV ebx, 10
+	
+	CMP eax, 10
+	JB @f
+	
+	.convert:
+	
+	XOR edx, edx
+	DIV ebx
+	
+	ADD dl, '0'
+	MOV BYTE [edi], dl
+	INC ecx
+	DEC edi
+	
+	CMP eax, 10
+	JA .convert
+	
+	@@:
+	INC ecx
+	ADD al, '0'
+	MOV BYTE [edi], al
+	MOV edi, DWORD [esp]
+	MOV DWORD [edi], ecx
+	
+	POP eax
+	
 	MOV esp, ebp
 	POP ebp
 	RET

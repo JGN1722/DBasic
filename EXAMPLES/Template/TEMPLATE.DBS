@@ -1,7 +1,13 @@
-\A simple template program that demonstrates how to open a window\
+\
+	Description: A simple template program that demonstrates how to open a window
+	Compile with: WINDOW.LIB
+\
+
 Main
 	Dim WindowID, Event
+	Dim PanelID
 	WindowID = OpenWindow(100,100,300,600,"Template program",@WindowCallback)
+	
 	Repeat
 		Event = HandleWindowEvents()
 	Until Event = 0

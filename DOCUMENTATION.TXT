@@ -216,6 +216,10 @@ operators are OR (|), XOR (~), AND (&), NOT (!), <, <=, >, >=, and = for
 equalities. Just keep in mind that you can not mix types in boolean
 relations, so don't write things like 'IF 2 = "2"', it won't even compile.
 
+Windows Api constants are also available for direct use, by prepending a #:
+
+Var1 = #WM_COMMAND
+
 Finally, you can directly increment or decrement a variable by one, using
 'x++' or 'x--'. The code generated for it is far more efficient than the
 code for 'x = x + 1'.
@@ -302,12 +306,13 @@ REPEAT
 	x++
 UNTIL x = 3
 
-I also implemented labels, because who knows, it might be useful to someone.
-You can define a label and then jump to it like this:
+I also implemented labels and a GOTO instruction, because who knows, it
+might be useful to someone. You can define a label and then jump to it like
+this:
 
 here:
 ...
-GOTO here
+GOTO here \Or GOTO(here)\
 
 At last, I have no idea where to talk about the END statement, so I'll
 just put it here. It immediately ends the program when executed. It is
@@ -317,14 +322,14 @@ END(exit_code)
 or
 END()
 
-The empty parentheses are compiled to return 0. The exit code is the number
+The empty parentheses mean a 0 exit code. The exit code is the number
 that is returned when another program calls your executable.
 
 \-------------------------------------------------------------------------\
 \About semicolons\
 Some programmers are used to semicolons, and some others are not. To make
 DBasic suitable for everyone, semicolons are optional. You can put them at
-the end of any statements, except DIM or CONST statements.
+the end of any statements.
 
 \-------------------------------------------------------------------------\
 \Procedures\
@@ -378,7 +383,7 @@ Right now, the only alternative calling convention available is stdcall.
 Note that specifying a calling convention here won't affect the way the
 rest of your program calls the procedure, which means that you should only
 use this functionality if you are comfortable with the concept. It was intended
-to allow programmers to write window callback procedures, that must follow
+to allow programmers to write window callback procedures, which must follow
 the stdcall convention.
 
 \-------------------------------------------------------------------------\
