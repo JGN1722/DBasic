@@ -1,11 +1,13 @@
 \
-WORK IN PROGRESS
-*TODO:
-*String manipulation
-*command bar that tells the line
-*commands
-*fix hotkeys
-*dialogs
+	Description: A simple text editor
+	Compile with: IO.LIB, WINDOW.LIB, COMMANDLINE.LIB, FILE.LIB, CONVERT.LIB, STRINGS.LIB
+	
+	WORK IN PROGRESS
+	*TODO:
+	*String manipulation
+	*command bar that tells the line
+	*commands
+	*hotkeys
 \
 
 MetaData
@@ -25,6 +27,7 @@ Global
 EndGlobal
 
 Enumeration
+	MenuReload
 	MenuSave
 	MenuExit
 	MenuFind
@@ -34,19 +37,20 @@ Enumeration
 	MenuCommand2
 	MenuCommand3
 	MenuAbout
+	MenuLicense
 EndEnumeration
 
-\Enumeration
-*	HotKeyCtrlA
-*	HotKeyCtrlW
-*	HotKeyCtrlS
-*EndEnumeration\
+Enumeration
+	HotKeyCtrlA
+	HotKeyCtrlW
+	HotKeyCtrlS
+EndEnumeration
 
 Main
-	Dim Event, test
+	Dim Event, FontID
 	
 	If GetArgCount() = 1 Then
-		FileName = "New File"
+		FileName = '<New File>'
 		Existing? = False
 	Else
 		FileName = GetCommandLineArgument(1)
@@ -55,9 +59,10 @@ Main
 	
 	Modified? = False
 	
-	WindowID = OpenWindow(100,100,300,600,FileName,@WindowCallback)
+	WindowID = OpenWindow(100,100,600,300,FileName & " - Minipad",@WindowCallback)
 	
-	EditID = CreateEdit(WindowID,0,0,240,585)
+	EditID = EditComponent(WindowID,0,0,240,585)
+	SetEditMaxLenght(EditID,-1)
 	If Existing? Then
 		SetComponentText(EditID,ReadFile(FileName))
 	EndIf
@@ -65,6 +70,7 @@ Main
 	MenuID = CreateMenu(WindowID)
 	
 	FileMenuID = CreateSubMenu()
+	AppendMenuItem(FileMenuID,MenuReload,"Reload")
 	AppendMenuItem(FileMenuID,MenuSave,"Save")
 	AppendMenuSeparator(FileMenuID)
 	AppendMenuItem(FileMenuID,MenuExit,"Exit")
@@ -87,20 +93,18 @@ Main
 	
 	HelpMenuID = CreateSubMenu()
 	AppendMenuItem(HelpMenuID,MenuAbout,"About...")
+	AppendMenuItem(HelpMenuID,MenuLicense,"License")
 	
 	AppendMenu(WindowID,MenuID,HelpMenuID,"Help")
-	
-	\KeyboardShortcut(WindowID,HotkeyCtrlA,MOD_CTRL,KEY_A)
-	*KeyboardShortcut(WindowID,HotkeyCtrlW,MOD_CTRL,KEY_W)
-	*KeyboardShortcut(WindowID,HotkeyCtrlS,MOD_CTRL,KEY_S)\
 	
 	StatusBarID = CreateStatusBar(WindowID)
 	SetComponentText(StatusBarID,"Ln 1, Col 1")
 	
-	Repeat
-	Until HandleWindowEvents() = 0
 	
-	CloseApplication()
+	FontID = CreateFont(False,False)
+	SetFont(EditID,FontID)
+	
+	Repeat Until HandleWindowEvents() = 0
 EndMain
 
 Sub CloseApplication()
@@ -109,14 +113,16 @@ Sub CloseApplication()
 			If MsgBox('This file has been modified. Do you want to save it ?','Warning',msgbox_warning+msgbox_yesno) = msgboxbutton_yes Then
 				SaveFile()
 			EndIf
-			End()
+			Return(True)
 		Else
-			If MsgBox("You're about to close a file that doesn't exist. All the text you've written will be lost. Do you still want to exit ?",'Warning',msgbox_warning+msgbox_yesno) = msgboxbutton_yes Then
-				End()
+			If MsgBox(	"You're about to close a file that doesn't exist. All the text you've written will be lost. Do you still want to exit ?"
+					,'Warning',msgbox_warning+msgbox_yesno) = msgboxbutton_yes Then
+				Return(True)
 			EndIf
+			Return(False)
 		EndIf
 	Else
-		End()
+		Return(True)
 	EndIf
 EndSub
 
@@ -133,36 +139,35 @@ EndSub
 Sub WindowCallback(lparam,wparam,wmsg,hwnd) (stdcall)
 	SetComponentText(StatusBarID,"Ln " & CStrU(GetCursorLine(EditID)) & ", Col " & CStrU(GetCursorCol(EditID)))
 	Select wmsg
-		Case wm_destroy
-			PostQuitMessage(0)
-		Case wm_size
+		Case #WM_CLOSE
+			If CloseApplication() Then
+				PostQuitMessage(0)
+			EndIf
+		Case #WM_SIZE
 			ResizeComponent(EditID, 0, 0, WindowWidth(WindowID) - 15, WindowHeight(WindowID) - 80)
 			ResizeComponent(StatusBarID, WindowHeight(WindowID) - 20, 0, WindowWidth(WindowID), 20)
-		Case wm_command
+		Case #WM_COMMAND
 			Select wparam
+				Case MenuReload
+					If Existing? Then
+						SetComponentText(EditID,ReadFile(FileName))
+					EndIf
 				Case MenuSave
 					SaveFile()
 				Case MenuExit
-					CloseApplication()
+					SendMessage(WindowID,#WM_CLOSE,0,0)
 				Case MenuAbout
-					msgbox('This is a Win32 notepad created with DBasic','About Minipad',msgbox_information)
-				Case EN_UPDATE * 65536 \EN_UPDATE is stored in the high word of the wparam\
+					MsgBox('This is a Win32 notepad created with DBasic','About Minipad',msgbox_information)
+				Case MenuLicense
+					MsgBox('Do whatever the fuck you want','License',msgbox_information)
+				Case #EN_UPDATE * 65536 \EN_UPDATE is stored in the high word of the wparam\
 					If !Modified? Then
 						Modified? = True
-						SetWindowTitle(WindowID,'*' & FileName)
+						SetWindowTitle(WindowID,'*' & FileName & ' - Minipad')
 					EndIf
+				Case #EN_MAXTEXT * 65536
+					MsgBox("Out of space","Error",msgbox_error)
 			EndSelect
-		\Case wm_hotkey
-		*	If GetActiveWindow() = hwnd Then
-		*		Select wparam
-		*			Case HotkeyCtrlA
-		*				SelectText(EditID,0,GetTextLength(EditID))
-		*			Case HotkeyCtrlW
-		*				CloseApplication()
-		*			Case HotKeyCtrlS
-		*				SaveFile()
-		*		EndSelect
-		*	EndIf\
 		Case Else
 			return(DefaultMessageHandling(lparam,wparam,wmsg,hwnd))
 	EndSelect

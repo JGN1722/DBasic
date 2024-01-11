@@ -6,7 +6,7 @@
 Main
 	Dim WindowID, Event
 	Dim PanelID
-	WindowID = OpenWindow(100,100,300,600,"Template program",@WindowCallback)
+	WindowID = OpenWindow(100,100,600,300,"Template program",@WindowCallback)
 	
 	Repeat
 		Event = HandleWindowEvents()
@@ -15,7 +15,7 @@ EndMain
 
 Sub WindowCallback(lparam,wparam,wmsg,hwnd) (stdcall)
 	Select wmsg
-		Case wm_destroy
+		Case #WM_DESTROY
 			PostQuitMessage(0)
 		Case Else
 			return(DefaultMessageHandling(lparam,wparam,wmsg,hwnd))

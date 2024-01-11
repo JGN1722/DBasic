@@ -1,0 +1,95 @@
+include 'OpenGLConstants.inc'
+
+rc RECT
+
+;$SUB INITOPENGL(WINDOWID)
+V_INITOPENGL:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke HeapAlloc,[hHeap],HEAP_ZERO_MEMORY,sizeof.PIXELFORMATDESCRIPTOR shr 2
+	MOV edi, eax
+	
+	invoke GetDC,DWORD [ebp + 8]
+	MOV ebx, eax
+	
+	MOV ecx, sizeof.PIXELFORMATDESCRIPTOR shr 2
+	MOV eax, 0
+	
+	MOV [edi+PIXELFORMATDESCRIPTOR.nSize],sizeof.PIXELFORMATDESCRIPTOR
+	MOV [edi+PIXELFORMATDESCRIPTOR.nVersion],1
+	MOV [edi+PIXELFORMATDESCRIPTOR.dwFlags],PFD_SUPPORT_OPENGL+PFD_DOUBLEBUFFER+PFD_DRAW_TO_WINDOW
+	MOV [edi+PIXELFORMATDESCRIPTOR.iLayerType],PFD_MAIN_PLANE
+	MOV [edi+PIXELFORMATDESCRIPTOR.iPixelType],PFD_TYPE_RGBA
+	MOV [edi+PIXELFORMATDESCRIPTOR.cColorBits],16
+	MOV [edi+PIXELFORMATDESCRIPTOR.cDepthBits],16
+	MOV [edi+PIXELFORMATDESCRIPTOR.cAccumBits],0
+	MOV [edi+PIXELFORMATDESCRIPTOR.cStencilBits],0
+	invoke ChoosePixelFormat,ebx,edi
+	invoke SetPixelFormat,ebx,eax,edi
+	invoke wglCreateContext,ebx
+	invoke wglMakeCurrent,ebx,eax
+	invoke GetClientRect,DWORD [ebp + 8],rc
+	invoke glViewport,0,0,[rc.right],[rc.bottom]
+	
+	invoke glClear,GL_COLOR_BUFFER_BIT
+	invoke SwapBuffers,ebx
+	
+	invoke HeapFree,[hHeap],0,edi
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB ADJUSTOPENGLVIEWPORT(WINDOWID)
+V_ADJUSTOPENGLVIEWPORT:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke GetClientRect,DWORD [ebp + 8],rc
+	invoke glViewport,0,0,[rc.right],[rc.bottom]
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+_error db 'error',0
+;$SUB CLEARSCREEN(WINDOWID)
+V_CLEARSCREEN:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke glClear,GL_COLOR_BUFFER_BIT
+	invoke GetDC,DWORD [ebp + 12]
+	invoke SwapBuffers,eax
+	
+	MOV esp, ebp
+	POP ebp
+	RET
+
+;$SUB DRAWSTUFF(RADIUS)
+V_DRAWSTUFF:
+	PUSH ebp
+	MOV ebp, esp
+	
+	invoke	glColor3f,1.0,0.1,0.1
+	
+	invoke glRotatef,0.0,0.0,0.0,0.0
+	invoke glClear,GL_COLOR_BUFFER_BIT
+	;invoke glBegin,GL_QUADS
+	
+	invoke glRectf,10.0,10.0,30.0,30.0
+	invoke glGetError
+	CMP eax, GL_INVALID_OPERATION
+	JNE .finish
+	invoke MessageBox,0,_error,_error,MB_ICONERROR
+	
+	;invoke glEnd
+	
+	.finish:
+	invoke GetDC,DWORD [ebp + 8]
+	invoke SwapBuffers,eax
+	
+	MOV esp, ebp
+	POP ebp
+	RET

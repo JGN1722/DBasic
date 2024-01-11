@@ -1,0 +1,33 @@
+\
+	Description: A demonstration of how to use OpenGL in DBasic
+	Compile with: WINDOW.LIB, OPENGL.LIB, IO.LIB
+\
+
+Global
+	Dim WindowID
+EndGlobal
+
+Main
+	Dim Event
+	
+	WindowID = OpenWindow(100,100,300,300,"OpenGL Demonstration",@WindowCallback)
+	InitOpenGL(WindowID)
+	
+	\DrawStuff(WindowID)\
+	
+	Repeat
+		Event = HandleWindowEvents()
+	Until Event = 0
+EndMain
+
+Sub WindowCallBack(lparam,wparam,wmsg,hwnd) (stdcall)
+	Select wmsg
+		Case #WM_DESTROY
+			PostQuitMessage(0)
+		Case #WM_SIZE
+			AdjustOpenGLViewport(WindowID)
+			ClearScreen(WindowID)
+		Case Else
+			Return(DefaultMessageHandling(lparam,wparam,wmsg,hwnd))
+	EndSelect
+EndSub

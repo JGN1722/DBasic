@@ -176,7 +176,7 @@ Function IsAlpha(c)
 		IsAlpha = False
 		Exit Function
 	End If
-	If InStr("ABCDEFGHIJKLMNOPQRSTUVWXYZ_?",UCase(c)) Then
+	If InStr("ABCDEFGHIJKLMNOPQRSTUVWXYZ_?§",UCase(c)) Then
 		IsAlpha = True
 	Else
 		IsAlpha = False

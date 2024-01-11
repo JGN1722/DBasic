@@ -15,14 +15,16 @@ Global
 EndGlobal
 
 Main
+	Dim FontID
 	Dim Event
 	Dim Top,ComponentHeight
 	Dim i;i = 0
+	
+	FontID = CreateFont(,)
+	
 	WindowID = OpenWindow(100,200,WinWidth,WinHeight, "DBasic - Components Demonstration",@WindowCallback)
 	Top = 10
 	ComponentHeight = 24
-	
-	FrameComponent(WindowID,10,Top,370,290,"Player..."); Top += 20
 	
 	StringID = StringComponent(WindowID,20,Top,200,ComponentHeight,"")
 	Button1ID = ButtonComponent(WindowID, 223, Top,  72, ComponentHeight, "Play")
@@ -35,7 +37,7 @@ Main
 	  AddComponentItem(PanelID,0,"MP3 PlayList")
 	  Tab1ID = WrapperComponent(WindowID,30,Top+30,WinWidth-80,WinHeight-Top-120)
 	    ListBoxID = ListBoxComponent(Tab1ID,6,10,230,148)
-	
+	    
 	    While i <= 30
 	      AddComponentItem(ListBoxID,i,"Music Song n° " & CStrU(i))
 	      i++
@@ -44,9 +46,9 @@ Main
 	    ButtonRemoveID = ButtonComponent(Tab1ID,250,38,80,24,"Remove")
 	    ButtonSelectID = ButtonComponent(Tab1ID,250,66,80,24,"Select")
 	    ToolTipComponent(Tab1ID,ButtonSelectID,"Select the current song")
-	
-	    TrackBarID = TrackBarComponent(Tab1ID,10,160,310,25,0,100)
-	
+	    
+	    TrackBarID = TrackBarComponent(Tab1ID,10,170,310,25,0,100)
+	    
 	  AddComponentItem(PanelID,1,"Options")
 	  Tab2ID = WrapperComponent(WindowID,30,Top+30,WinWidth-80,WinHeight-Top-120)
 	    CheckBoxComponent(Tab2ID,10,10,250,24,"Enable low-pass filter")
@@ -57,12 +59,12 @@ Main
 	      AddComponentItem(ComboBoxID,-1,"Bump bass")
 	    SetComponentState(ComboBoxID,0)
 	    DisableComponent(ComboBoxID,DISABLED)
-	
-	    Option1ID = FirstOptionComponent(Tab2ID,10,100,80,24,"640*480")
-	    Option2ID = OptionComponent(Tab2ID,10,120,80,24,"800*600")
-	    Option3ID = OptionComponent(Tab2ID,10,140,80,24,"1024*768")
+	    
+	    Option1ID = FirstOptionComponent(Tab2ID,10,100,90,24,"640*480")
+	    Option2ID = OptionComponent(Tab2ID,10,120,90,24,"800*600")
+	    Option3ID = OptionComponent(Tab2ID,10,140,90,24,"1024*768")
 	    ClickOptionComponent(Option1ID)
-	
+	    
 	    ButtonInfoID = ButtonComponent(Tab2ID,150,140,80,24,"Info")
 	
 	TextComponent(WindowID, 10, WinHeight-60, 250, 24, "DBasic - Components demonstration")
