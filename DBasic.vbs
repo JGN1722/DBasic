@@ -29,7 +29,7 @@ KWList = Array(	"IF","THEN","ELSEIF","ELSE","ENDIF","WHILE","LOOP","DIM",_
 		"SUB","ENDSUB","RETURN","END","GOTO","INT","STR",_
 		"OR","XOR","AND","NOT","CALL","INIT","ENDINIT","METADATA",_
 		"ENDMETADATA","ENUMERATION","ENDENUMERATION","CLASS","ENDCLASS",_
-		"PROPERTY","METHOD","ENDMETHOD","SET")
+		"PROPERTY","METHOD","ENDMETHOD")
 Dim EndKeywords:EndKeywords = "|ENDINIT|ENDMAIN|" &_
 		"LOOP|UNTIL|ENDIF|ENDSELECT|ENDSUB|CASE|" &_
 		"ELSE|ELSEIF|ENDMETHOD|"
@@ -292,6 +292,10 @@ Sub CheckDup(n)
 	End If
 End Sub
 
+Sub CheckIsKeyword(n)
+	If IsKeyword(n) Then Abort("Reserved keyword used as identifier ('" & n & "')")
+End Sub
+
 Sub AddEntry(n,t)
 	If InTable(n) Then Abort("Duplicate Identifier (" & n & ")")
 	ST.Add n,t
@@ -419,7 +423,7 @@ Sub PreParseProcedures
 		SkipBlock("ENUMERATION")
 	Loop
 	Do While Value = "CLASS"
-		SkipBlock("CLASS")
+		RegisterClass
 	Loop
 	If Value = "INIT" Then SkipBlock("INIT")
 	SkipBlock("MAIN")
@@ -443,6 +447,50 @@ Sub SkipBlock(Name)
 		End If
 	Loop
 	Next1
+End Sub
+
+Sub RegisterClass
+	Dim class_name, property_name, property_count,t:t = "INT"
+	Dim temp_dict:Set temp_dict = CreateObject("Scripting.Dictionary")
+	
+	MatchString("CLASS")
+	If ClassST.Exists(Value) Then
+		Abort("Already declared class: " & Value)
+	End If
+	CheckIsKeyword(Value)
+	class_name = Value
+	Next1
+	
+	Do While Value <> "ENDCLASS"
+		Select Case Value
+			Case "PROPERTY"
+				MatchString("PROPERTY")
+				If Value = "INT" Or Value = "STR" Then
+					t = Value
+					Next1
+				End If
+				
+				If temp_dict.Exists(Value) Then
+					Abort("Already declared property: " & Value)
+				End If
+				CheckIsKeyword(Value)
+				
+				temp_dict.Add Value, Array("property",t,False,property_count)
+				property_count = property_count + 4
+				
+				Next1
+				t = "INT"
+			Case "METHOD"
+				SkipBlock("METHOD")
+			Case Else
+				Expected("Method or property declaration")
+		End Select
+	Loop
+	
+	MatchString("ENDCLASS")
+	
+	temp_dict.Add "InstanceSize", property_count
+	ClassST.Add class_name,temp_dict
 End Sub
 
 Sub RegisterProcedures
@@ -523,6 +571,8 @@ Sub PreParseLibs
 			CurrentChar = Mid(LibText,Counter,1)
 		Loop
 	End If
+	
+	PassNumber = 2
 End Sub
 
 Sub PreParseLib
@@ -664,7 +714,6 @@ Sub WriteVersion(VersionString)
 End Sub
 
 Sub Prolog
-	PassNumber = 2
 	PostLabel("start")
 	EmitLnD("hHeap dd 0")
 	EmitLn("invoke GetProcessHeap")
@@ -716,12 +765,12 @@ Sub Prog
 	Header
 	PreParseProcedures
 	PreParseLibs
-	Prolog
 	WriteMetadata
 	TopDecls
 	Enumerations
-	JmpToMainCode
-	ClassDeclarations
+	RegisterMethods
+	Prolog
+	AllocateGlobalArrays
 	InitBlock
 	MainBlock
 	Epilog
@@ -829,46 +878,45 @@ Sub Enumerations
 	Loop
 End Sub
 
-Sub JmpToMainCode
-	EmitLn("JMP Main")
-End Sub
-
-Sub ClassDeclarations
+Sub RegisterMethods
 	Do While Value = "CLASS"
-		MatchString("CLASS")
-		Do While Value <> "ENDCLASS"
-			If Value = "PROPERTY" Then
-				DeclareProperty
-			ElseIf Value = "METHOD" Then
-				DeclareMethod
-			ElseIf Value = "." Then
-				DoPass
-			Else
-				Expected("Property or method declaration")
-			End If
-		Loop
-		MatchString("ENDCLASS")
+		RegisterClassMethods
 	Loop
 End Sub
 
-Sub DeclareProperty
-	MatchString("PROPERTY")
-	If Value = "INT" Or Value = "STR" Then
-		Next1
-	End If
+Sub RegisterClassMethods
+	Dim class_name,method_name
+	Dim arg_count, t:t = "INT"
+	MatchString("CLASS")
+	class_name = Value
 	Next1
-End Sub
-
-Sub DeclareMethod
-	Dim n
-	MatchString("METHOD")
-	n = Value
-	Next1
-	MatchString("(")
-	'...
-	MatchString(")")
-	Block "",n
-	MatchString("ENDMETHOD")
+	
+	Do While Value <> "ENDCLASS"
+		If Value = "PROPERTY" Then
+			MatchString("PROPERTY")
+			If Value = "INT" Or Value = "STR" Then
+				Next1
+			End If
+			Next1
+		Else
+			MatchString("METHOD")
+			method_name = Value
+			MatchString("(")
+			MethodParamList
+			MatchString(")")
+			If Token = ":" Then
+				MatchString(":")
+				If Value = "INT" Or Value = "STR" Then
+					t = Value
+					Next1
+				End If
+			End If
+			Block "",""
+			MatchString("ENDMETHOD")
+		End If
+	Loop
+	
+	MatchString("ENDCLASS")
 End Sub
 
 Sub InitBlock
@@ -905,7 +953,10 @@ End Sub
 Sub AllocArray(t,n,i)
 	CheckDup(n)
 	Allocate n
-	AddEntry n,Array("array",t,"")
+	AddEntry n,Array("array",t,i)
+End Sub
+
+Sub AllocGlobalArraySpace(n,i)
 	EmitLn("invoke HeapAlloc,[hHeap],HEAP_ZERO_MEMORY," & i * 4 + 4)
 	EmitLn("MOV DWORD [V_" & n & "], eax")
 	EmitLn("MOV DWORD [eax], " & i)
@@ -1178,19 +1229,19 @@ Sub Block(L,Ret)
 	Dim n
 	Do While InStr(EndKeywords,"|"&Value&"|") = 0
 		Select Case Value
-			Case ";" :Semi
-			Case "IF" :DoIf L,Ret
-			Case "SELECT" :DoSelect L,Ret
-			Case "WHILE" :DoWhile Ret
-			Case "DO" :DoLoop Ret
-			Case "REPEAT" :DoRepeat Ret
-			Case "BREAK" :DoBreak L
-			Case "$" :InlineAsm
-			Case "RETURN" :DoReturn(Ret)
-			Case "END" :DoEnd
-			Case "GOTO" :DoGoto
-			Case "CALL" :DoCall
-			Case "." :DoPass
+			Case ";"	:Semi
+			Case "IF"	:DoIf L,Ret
+			Case "SELECT"	:DoSelect L,Ret
+			Case "WHILE"	:DoWhile Ret
+			Case "DO"	:DoLoop Ret
+			Case "REPEAT"	:DoRepeat Ret
+			Case "BREAK"	:DoBreak L
+			Case "$"	:InlineAsm
+			Case "RETURN"	:DoReturn(Ret)
+			Case "END"	:DoEnd
+			Case "GOTO"	:DoGoto
+			Case "CALL"	:DoCall
+			Case "."	:DoPass
 			Case Else:
 				n = Value
 				Next1
@@ -1961,7 +2012,7 @@ Sub DoSub
 	Dim Name,k,L1,freeargs:freeargs = False
 	MatchString("SUB")
 	Name = Value
-	If IsKeyword(Value) Then Abort("Reserved keyword used as identifier (" & Value & ")")
+	CheckIsKeyword(Value)
 	L1 = "RET" & Name
 	Next1
 	MatchString("(")
@@ -2081,8 +2132,8 @@ Sub AllocateGlobalArrays
 	Dim i,arr:arr = ST.Keys
 	If Not UBound(arr) = -1 Then
 		Do
-			If GetIdentType(arr(i)) = "array" And Not GetAdditionalInfo(arr(i)) = -1 Then
-				AllocArray ParamNumber(arr(i)),GetAdditionalInfo(arr(i))
+			If GetIdentType(arr(i)) = "array" Then
+				AllocGlobalArraySpace arr(i),GetAdditionalInfo(arr(i))
 			End If
 			i = i + 1
 		Loop While i <= UBound(arr)
@@ -2102,7 +2153,7 @@ Function IsParam(n)
 End Function
 
 Sub AddParam(n,IdentType,DataType,AdditionalInfo)
-	If IsKeyword(n) Then Abort("Reserved keyword used as identifier (" & n & ")")
+	CheckIsKeyword(n)
 	If InTable(n) Then Abort(n & " is already declared in the global scope")
 	If IsParam(n) Then Duplicate(n)
 	NumParams = NumParams + 1
