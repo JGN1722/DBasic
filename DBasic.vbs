@@ -20,6 +20,8 @@ Dim ErrLn
 Dim DebugMode
 Dim PassNumber
 
+Dim InMethod:InMethod = False
+
 '---------------------------------------------------------------------
 'Definition Of Keywords And Token Types
 Dim KWList
@@ -29,7 +31,7 @@ KWList = Array(	"IF","THEN","ELSEIF","ELSE","ENDIF","WHILE","LOOP","DIM",_
 		"SUB","ENDSUB","RETURN","END","GOTO","INT","STR",_
 		"OR","XOR","AND","NOT","CALL","INIT","ENDINIT","METADATA",_
 		"ENDMETADATA","ENUMERATION","ENDENUMERATION","CLASS","ENDCLASS",_
-		"PROPERTY","METHOD","ENDMETHOD")
+		"PROPERTY","METHOD","ENDMETHOD","SELF")
 Dim EndKeywords:EndKeywords = "|ENDINIT|ENDMAIN|" &_
 		"LOOP|UNTIL|ENDIF|ENDSELECT|ENDSUB|CASE|" &_
 		"ELSE|ELSEIF|ENDMETHOD|"
@@ -365,7 +367,11 @@ Function GetIdentType(n)
 End Function
 
 Function GetDataType(n)
-	If IsParam(n) Then
+	If IsMethod(n) Then
+		GetDataType = ClassST.Item(GetOriginClass(n)).Item(n)(1)
+	ElseIf IsProperty(n) Then
+		GetDataType = ClassST.Item(GetOriginClass(n)).Item(n)(1)
+	ElseIf IsParam(n) Then
 		GetDataType = FormalParamST.Item(n)(1)
 	ElseIf InTable(n) Then
 		GetDataType = ST.Item(n)(1)
@@ -450,7 +456,7 @@ Sub SkipBlock(Name)
 End Sub
 
 Sub RegisterClass
-	Dim class_name, property_name, property_count,t:t = "INT"
+	Dim class_name, member_name, property_count,arg_count,t:t = "INT"
 	Dim temp_dict:Set temp_dict = CreateObject("Scripting.Dictionary")
 	
 	MatchString("CLASS")
@@ -481,7 +487,37 @@ Sub RegisterClass
 				Next1
 				t = "INT"
 			Case "METHOD"
+				MatchString("METHOD")
+				member_name = Value
+				Next1
+				
+				MatchString("(")
+				Do While Not Token = ")"
+					If Value = "STR" Or Value  = "INT" Then Next1
+					arg_count = arg_count + 1
+					Next1
+					If Token = "[" Then
+						MatchString("[")
+						MatchString("]")
+					End If
+					If Not Token = ")" Then MatchString(",")
+				Loop
+				MatchString(")")
+				
+				If Token = ":" Then
+					MatchString(":")
+					If Not Value = "INT" And Not Value = "STR" Then
+						Abort("Undefined type (" & Value & ")")
+					End If
+					t = Value
+					Next1
+				End If
+				
+				temp_dict.Add member_name, Array("method",t,arg_count)
+				
 				SkipBlock("METHOD")
+				t = "INT"
+				arg_count = 0
 			Case Else
 				Expected("Method or property declaration")
 		End Select
@@ -504,9 +540,7 @@ Sub RegisterProcedures
 		Next1
 		MatchString("(")
 		Do While Not Token = ")"
-			If Value = "STR" Or Value  = "INT" Then
-				Next1
-			End If
+			If Value = "STR" Or Value  = "INT" Then Next1
 			arr(2) = arr(2) + 1
 			Next1
 			If Token = "[" Then
@@ -516,6 +550,11 @@ Sub RegisterProcedures
 			If Not Token = ")" Then MatchString(",")
 		Loop
 		MatchString(")")
+		If Token = "(" Then
+			MatchString("(")
+			Next1
+			MatchString(")")
+		End If
 		If Token = ":" Then
 			MatchString(":")
 			If Not Value = "INT" And Not Value = "STR" Then
@@ -768,7 +807,7 @@ Sub Prog
 	WriteMetadata
 	TopDecls
 	Enumerations
-	RegisterMethods
+	CompileMethods
 	Prolog
 	AllocateGlobalArrays
 	InitBlock
@@ -878,13 +917,15 @@ Sub Enumerations
 	Loop
 End Sub
 
-Sub RegisterMethods
+Sub CompileMethods
+	InMethod = True
 	Do While Value = "CLASS"
-		RegisterClassMethods
+		CompileClassMethods
 	Loop
+	InMethod = False
 End Sub
 
-Sub RegisterClassMethods
+Sub CompileClassMethods
 	Dim class_name,method_name
 	Dim arg_count, t:t = "INT"
 	MatchString("CLASS")
@@ -899,20 +940,7 @@ Sub RegisterClassMethods
 			End If
 			Next1
 		Else
-			MatchString("METHOD")
-			method_name = Value
-			MatchString("(")
-			MethodParamList
-			MatchString(")")
-			If Token = ":" Then
-				MatchString(":")
-				If Value = "INT" Or Value = "STR" Then
-					t = Value
-					Next1
-				End If
-			End If
-			Block "",""
-			MatchString("ENDMETHOD")
+			DoMethod
 		End If
 	Loop
 	
@@ -1171,7 +1199,7 @@ Sub AssignAdd(n)
 	If Not GetDataType(n) = "INT" Then Abort("Cannot assign and add to " & n & " (invalid type)")
 	Expression
 	If IsParam(n) Then
-		EmitLn("ADD DWORD [ebp + " & ((NumParams + 2) * 4) - (ParamNumber(n) * 4) & "], eax")
+		EmitLn("ADD DWORD [ebp + " & ((NumParams + 2) * 4) - (ParamNumber(n) * 4) + AdjustOffset & "], eax")
 	Else
 		EmitLn("ADD [V_" & n & "], eax")
 	End If
@@ -1183,7 +1211,7 @@ Sub AssignSub(n)
 	If Not GetDataType(n) = "INT" Then Abort("Cannot assign and subtract to " & n & " (invalid type)")
 	Expression
 	If IsParam(n) Then
-		EmitLn("SUB DWORD [ebp + " & ((NumParams + 2) * 4) - (ParamNumber(n) * 4) & "], eax")
+		EmitLn("SUB DWORD [ebp + " & ((NumParams + 2) * 4) - (ParamNumber(n) * 4) + AdjustOffset & "], eax")
 	Else
 		EmitLn("SUB [V_" & n & "], eax")
 	End If
@@ -1196,8 +1224,8 @@ Sub AssignMul(n)
 	If Not GetDataType(n) = "INT" Then Abort("Cannot assign and multiply to " & n & " (invalid type)")
 	Expression
 	If IsParam(n) Then
-		EmitLn("IMUL eax, DWORD [ebp + " & ((NumParams + 2) * 4) - (ParamNumber(n) * 4) & "]")
-		EmitLn("MOV DWORD [ebp + " & ((NumParams + 2) * 4) - (ParamNumber(n) * 4) & "], eax")
+		EmitLn("IMUL eax, DWORD [ebp + " & ((NumParams + 2) * 4) - (ParamNumber(n) * 4) + AdjustOffset & "]")
+		EmitLn("MOV DWORD [ebp + " & ((NumParams + 2) * 4) - (ParamNumber(n) * 4) + AdjustOffset & "], eax")
 	Else
 		EmitLn("IMUL eax, [V_" & n & "]")
 		EmitLn("MOV [V_" & n & "], eax")
@@ -2179,6 +2207,96 @@ End Sub
 
 '---------------------------------------------------------------------
 '---------------------------------------------------------------------
+'Methods And Classes Handling
+'---------------------------------------------------------------------
+'---------------------------------------------------------------------
+Sub DoMethod
+	Dim Name,k,L1
+	MatchString("METHOD")
+	Name = Value
+	L1 = "RET" & Name
+	Next1
+	MatchString("(")
+	FormalList
+	MatchString(")")
+	If Token = ":" Then
+		MatchString(":")
+		If Value = "INT" Or Value = "STR" Then
+			Next1
+		Else
+			Expected("Type Name")
+		End If
+	End If
+	If DebugMode = 1 Then
+		EmitLn("db '" & Name & "',0")
+	End If
+	PostLabel("V_" & Name)
+	k = LocDecls
+	LocAlloc(k)
+	ProcHeader
+	PushSavedRegisters
+	AllocateLocalArrays
+	Block "",L1
+	LocFree k,L1
+	PopSavedRegisters
+	MatchString("ENDMETHOD")
+	ClearParams
+End Sub
+
+Function AdjustOffset
+	If InMethod Then
+		AdjustOffset = 4
+	Else
+		AdjustOffset = 0
+	End If
+End Function
+
+Function IsMethod(n)
+	Dim i,arr:arr = ClassST.Keys
+	IsMethod = False
+	If Not UBound(arr) = -1 Then
+		Do
+			If ClassST.Item(arr(i)).Exists(n) Then
+				If ClassST.Item(arr(i)).Item(n)(0) = "method" Then
+					IsMethod = True
+					Exit Do
+				End If
+			End If
+			i = i + 1
+		Loop While i <= UBound(arr)
+	End If
+End Function
+
+Function IsProperty(n)
+	Dim i,arr:arr = ClassST.Keys
+	IsProperty = False
+	If Not UBound(arr) = -1 Then
+		Do
+			If ClassST.Item(arr(i)).Exists(n) Then
+				If ClassST.Item(arr(i)).Item(n)(0) = "property" Then
+					IsProperty = True
+					Exit Do
+				End If
+			End If
+			i = i + 1
+		Loop While i <= UBound(arr)
+	End If
+End Function
+
+Function GetOriginClass(n)
+	Dim i,arr:arr = ClassST.Keys
+	If Not UBound(arr) = -1 Then
+		Do
+			If ClassST.Item(arr(i)).Exists(n) Then
+				GetOriginClass = arr(i)
+			End If
+			i = i + 1
+		Loop While i <= UBound(arr)
+	End If
+End Function
+
+'---------------------------------------------------------------------
+'---------------------------------------------------------------------
 'Math Code Generation Routines
 '---------------------------------------------------------------------
 '---------------------------------------------------------------------
@@ -2228,7 +2346,7 @@ End Sub
 
 Sub LoadLocalPointer(n)
 	EmitLn("MOV eax, ebp")
-	EmitLn("ADD eax, " & ((NumParams + 2) * 4) - (ParamNumber(n) * 4))
+	EmitLn("ADD eax, " & ((NumParams + 2) * 4) - (ParamNumber(n) * 4) + AdjustOffset)
 End Sub
 
 Sub LoadVar(n)
@@ -2294,7 +2412,7 @@ End Sub
 
 Sub StoreArray(n)
 	If IsParam(n) Then
-		EmitLn("MOV ebx, [ebp + " & ((NumParams + 2) * 4) - (ParamNumber(n) * 4) & "]")
+		EmitLn("MOV ebx, [ebp + " & ((NumParams + 2) * 4) - (ParamNumber(n) * 4) + AdjustOffset & "]")
 	Else
 		EmitLn("MOV ebx, [V_" & n & "]")
 	End If
@@ -2304,7 +2422,7 @@ End Sub
 
 Sub LoadArrayCell(n)
 	If IsParam(n) Then
-		EmitLn("MOV ebx, [ebp + " & ((NumParams + 2) * 4) - (ParamNumber(n) * 4) & "]")
+		EmitLn("MOV ebx, [ebp + " & ((NumParams + 2) * 4) - (ParamNumber(n) * 4) + AdjustOffset & "]")
 	Else
 		EmitLn("MOV ebx, [V_" & n & "]")
 	End If
@@ -2418,7 +2536,7 @@ End Sub
 Sub Inc(n)
 	If Not GetIdentType(n) = "variable" Then Abort("Identifiers other than variables cannot be incremented")
 	If IsParam(n) Then
-		EmitLn("INC DWORD [ebp + " & ((NumParams + 2) * 4) - (ParamNumber(n) * 4) & "]")
+		EmitLn("INC DWORD [ebp + " & ((NumParams + 2) * 4) - (ParamNumber(n) * 4) + AdjustOffset & "]")
 	Else
 		EmitLn("INC DWORD [V_" & n & "]")
 	End If
@@ -2427,7 +2545,7 @@ End Sub
 Sub Dec(n)
 	If Not GetIdentType(n) = "variable" Then Abort("Identifiers other than variables cannot be decremented")
 	If IsParam(n) Then
-		EmitLn("DEC DWORD [ebp + " & ((NumParams + 2) * 4) - (ParamNumber(n) * 4) & "]")
+		EmitLn("DEC DWORD [ebp + " & ((NumParams + 2) * 4) - (ParamNumber(n) * 4) + AdjustOffset & "]")
 	Else
 		EmitLn("DEC DWORD [V_" & n & "]")
 	End If
@@ -2494,12 +2612,12 @@ Sub Return(k)
 End Sub
 
 Sub LoadParam(n)
-	Dim Offset:Offset = ((NumParams + 2) * 4) - (n * 4)
+	Dim Offset:Offset = ((NumParams + 2) * 4) - (n * 4) + AdjustOffset
 	EmitLn("MOV eax, DWORD [ebp + " & Offset & "]")
 End Sub
 
 Sub StoreParam(n)
-	Dim Offset:Offset = ((NumParams + 2) * 4) - (n * 4)
+	Dim Offset:Offset = ((NumParams + 2) * 4) - (n * 4) + AdjustOffset
 	EmitLn("MOV DWORD [ebp + " & Offset & "], eax")
 End Sub
 
@@ -2556,7 +2674,7 @@ End Sub
 Sub FreeStringArrayLoc(n)
 	Dim o
 	o = ParamNumber(n)
-	EmitLn("MOV ebx, DWORD [ebp + " & ((NumParams + 2) * 4) - (o * 4) & "]")
+	EmitLn("MOV ebx, DWORD [ebp + " & ((NumParams + 2) * 4) - (o * 4) + AdjustOffset & "]")
 	EmitLn("MOV ecx, DWORD [ebx]")
 	PostLabel("@@")
 	EmitLn("PUSH ecx")
@@ -2584,13 +2702,13 @@ End Sub
 
 Sub AllocateLocalArray(o,i)
 	EmitLn("invoke HeapAlloc,[hHeap],HEAP_ZERO_MEMORY," & i * 4 + 4)
-	EmitLn("MOV DWORD [ebp + " & ((NumParams + 2) * 4) - (o * 4) & "], eax")
+	EmitLn("MOV DWORD [ebp + " & ((NumParams + 2) * 4) - (o * 4) + AdjustOffset & "], eax")
 	EmitLn("MOV DWORD [eax], " & i)
 End Sub
 
 Sub CopyArray(n)
 	If IsParam(n) Then
-		o = ((NumParams + 2) * 4) - (ParamNumber(n) * 4)
+		o = ((NumParams + 2) * 4) - (ParamNumber(n) * 4) + AdjustOffset
 		EmitLn("MOV esi, DWORD [ebp + " & o & "]")
 	Else
 		EmitLn("MOV esi, [V_" & n & "]")
@@ -2608,7 +2726,7 @@ End Sub
 Sub CopyStringArray(n)
 	Dim o
 	If IsParam(n) Then
-		o = ((NumParams + 2) * 4) - (ParamNumber(n) * 4)
+		o = ((NumParams + 2) * 4) - (ParamNumber(n) * 4) + AdjustOffset
 		EmitLn("MOV esi, DWORD [ebp + " & o & "]")
 	Else
 		EmitLn("MOV esi, [V_" & n & "]")
@@ -2648,7 +2766,7 @@ End Sub
 
 Sub LoadStringFromArray(n)
 	If IsParam(n) Then
-		EmitLn("MOV esi, [ebp + " & ((NumParams + 2) * 4) - (ParamNumber(n) * 4) & "]")
+		EmitLn("MOV esi, [ebp + " & ((NumParams + 2) * 4) - (ParamNumber(n) * 4) + AdjustOffset & "]")
 	Else
 		EmitLn("MOV esi, [V_" & n & "]")
 	End If
@@ -2671,14 +2789,14 @@ Sub FreeHeapBuffer(n)
 End Sub
 
 Sub FreeHeapBufferLoc(n)
-	Dim Offset:Offset = ((NumParams + 2) * 4) - (n * 4)
+	Dim Offset:Offset = ((NumParams + 2) * 4) - (n * 4) + AdjustOffset
 	EmitLn("invoke HeapFree, [hHeap], 0, [ebp + " & Offset & "]")
 End Sub
 
 Sub FreeHeapBufferArray(n)
 	Dim o
 	If IsParam(n) Then
-		o = ((NumParams + 2) * 4) - (ParamNumber(n) * 4)
+		o = ((NumParams + 2) * 4) - (ParamNumber(n) * 4) + AdjustOffset
 		EmitLn("MOV ebx, DWORD [ebp + " & o & "]")
 	Else
 		EmitLn("MOV ebx, [V_" & n & "]")
@@ -2699,7 +2817,7 @@ End Sub
 
 Sub CopyStringVar(n)
 	If IsParam(n) Then
-		EmitLn("MOV esi, [ebp + " & ((NumParams + 2) * 4) - (ParamNumber(n) * 4) & "]")
+		EmitLn("MOV esi, [ebp + " & ((NumParams + 2) * 4) - (ParamNumber(n) * 4) + AdjustOffset & "]")
 	ElseIf Constants.Exists(n) Then
 		EmitLn("MOV esi, " & Constants.Item(n)(1))
 	Else
@@ -2717,7 +2835,7 @@ End Sub
 
 Sub CopyStringFromArray(n)
 	If IsParam(n) Then
-		EmitLn("MOV esi, [ebp + " & ((NumParams + 2) * 4) - (ParamNumber(n) * 4) & "]")
+		EmitLn("MOV esi, [ebp + " & ((NumParams + 2) * 4) - (ParamNumber(n) * 4) + AdjustOffset & "]")
 	Else
 		EmitLn("MOV esi, [V_" & n & "]")
 	End If

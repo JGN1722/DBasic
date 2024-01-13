@@ -356,9 +356,11 @@ behavior.
 
 To call a procedure, simply write:
 
-foo(1,"hey") or CALL foo(1,"hey") \the CALL keyword from VBS looked cool\
+foo(1,"hey")
+or
+CALL foo(1,"hey") \the CALL keyword from VBS looked cool\
 
-or:
+or, you can directly use the return value of procedures in expressions:
 
 x = 1 + foo()
 
@@ -396,7 +398,7 @@ must be written in Flat Assembly, and in order to use label, procedure or
 variable names, you shall prefix them with "V_" and write them in
 capital letters:
 
-SUB infinite_loop():
+SUB infinite_loop()
 	here:
 	...
 	$JMP V_HERE

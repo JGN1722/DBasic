@@ -72,9 +72,7 @@ Main
 	
 	HideWindow(Tab2ID)
 	
-	Repeat
-		Event = HandleWindowEvents()
-	Until Event = 0
+	Repeat Until HandleWindowEvents() = 0
 EndMain
 
 Sub WindowCallback(lparam,wparam,wmsg,hwnd) (stdcall)

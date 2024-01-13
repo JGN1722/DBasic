@@ -4,13 +4,11 @@
 \
 
 Main
-	Dim WindowID, Event
+	Dim WindowID
 	Dim PanelID
 	WindowID = OpenWindow(100,100,600,300,"Template program",@WindowCallback)
 	
-	Repeat
-		Event = HandleWindowEvents()
-	Until Event = 0
+	Repeat Until HandleWindowEvents() = 0
 EndMain
 
 Sub WindowCallback(lparam,wparam,wmsg,hwnd) (stdcall)
