@@ -1,0 +1,9 @@
+\
+	Description: Hello, World!
+	Compile with: IO.LIB
+	
+	Note: Copied on the design of the example program Gadget.pb delivered with PureBasic
+\
+ Main
+    MsgBox("Hello, World","DBasic",msgbox_information
+EndMain
