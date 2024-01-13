@@ -1,6 +1,8 @@
 \
 	Description: A demonstration of how to use OpenGL in DBasic
 	Compile with: WINDOW.LIB, OPENGL.LIB, IO.LIB
+
+	WORK IN PROGRESS, NOT FUNCTIONAL YET
 \
 
 Global
