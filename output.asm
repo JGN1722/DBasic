@@ -1,3 +1,4 @@
+;What you see here is the compiled output of the DBasic compiler for the MINIPAD.DBS example program
 format PE GUI 4.0
 entry start
 include 'fasm\include\win32a.inc'
