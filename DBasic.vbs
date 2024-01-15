@@ -44,6 +44,14 @@ Constants.Add "FALSE", Array("INT",0)
 Constants.Add "MEANING_OF_LIFE", Array("INT",42)
 
 '---------------------------------------------------------------------
+'Types Declarations
+Dim TypeList:Set TypeList = CreateObject("Scripting.Dictionary")
+'<TypeName> :: <BufferSize>
+'The BufferSize needs to be -1 if there is no need for a buffer
+TypeList.Add "INT", -1
+TypeList.Add "STR", -1
+
+'---------------------------------------------------------------------
 'Variable Declarations
 Dim CodeOutput,DataOutput,RessourceOutput
 
@@ -218,7 +226,7 @@ Function IsMulop(c)
 End Function
 
 Function IsOrop(c)
-	If c = "|" Or c = "~" Or c = "o" Or c = "X" Then
+	If c = "|" Or c = "~" Or c = "OR" Or c = "XOR" Then
 		IsOrop = True
 	Else
 		IsOrop = False
@@ -394,6 +402,14 @@ Function SetAdditionalInfo(n,v)
 	End If
 End Function
 
+Function IsType(n)
+	IsType = TypeList.Exists(n)
+End Function
+
+Function GetTypeBufferSize(n)
+	GetTypeBufferSize = TypeList.Item(n)
+End Function
+
 Sub MatchString(x)
 	If Value <> x Then Expected(x)
 	Next1
@@ -471,7 +487,7 @@ Sub RegisterClass
 		Select Case Value
 			Case "PROPERTY"
 				MatchString("PROPERTY")
-				If Value = "INT" Or Value = "STR" Then
+				If IsType(Value) Then
 					t = Value
 					Next1
 				End If
@@ -493,7 +509,7 @@ Sub RegisterClass
 				
 				MatchString("(")
 				Do While Not Token = ")"
-					If Value = "STR" Or Value  = "INT" Then Next1
+					If IsType(Value) Then Next1
 					arg_count = arg_count + 1
 					Next1
 					If Token = "[" Then
@@ -506,7 +522,7 @@ Sub RegisterClass
 				
 				If Token = ":" Then
 					MatchString(":")
-					If Not Value = "INT" And Not Value = "STR" Then
+					If Not IsType(Value) Then
 						Abort("Undefined type (" & Value & ")")
 					End If
 					t = Value
@@ -540,7 +556,7 @@ Sub RegisterProcedures
 		Next1
 		MatchString("(")
 		Do While Not Token = ")"
-			If Value = "STR" Or Value  = "INT" Then Next1
+			If IsType(Value) Then Next1
 			arr(2) = arr(2) + 1
 			Next1
 			If Token = "[" Then
@@ -557,10 +573,10 @@ Sub RegisterProcedures
 		End If
 		If Token = ":" Then
 			MatchString(":")
-			If Not Value = "INT" And Not Value = "STR" Then
+			If Not IsType(Value) Then
 				Abort("Undefined type (" & Value & ")")
 			End If
-			arr(1) = Token
+			arr(1) = Value
 			Next1
 		Else
 			arr(1) = "INT"
@@ -935,7 +951,7 @@ Sub CompileClassMethods
 	Do While Value <> "ENDCLASS"
 		If Value = "PROPERTY" Then
 			MatchString("PROPERTY")
-			If Value = "INT" Or Value = "STR" Then
+			If IsType(Value) Then
 				Next1
 			End If
 			Next1
@@ -997,7 +1013,7 @@ Sub TopDecls
 		Do While Value = "DIM" Or Value = "CONST" Or Value = "."
 			If Value = "DIM" Then
 				MatchString("DIM")
-				If Value = "INT" Or Value = "STR" Then
+				If IsType(Value) Then
 					t = Value
 					Next1
 				End If
@@ -1015,7 +1031,7 @@ Sub TopDecls
 				t = "INT"
 				Do While Token = ","
 					MatchString(",")
-					If Value = "INT" Or Value = "STR" Then
+					If IsType(Value) Then
 						t = Value
 						Next1
 					End If
@@ -1034,7 +1050,7 @@ Sub TopDecls
 				If Token = ";" Then MatchString(";")
 			ElseIf Value = "CONST" Then
 				MatchString("CONST")
-				If Value = "INT" Or Value = "STR" Then
+				If IsType(Value) Then
 					t = Value
 					Next1
 				End If
@@ -1050,7 +1066,7 @@ Sub TopDecls
 				t = "INT"
 				Do While Token = ","
 					MatchString(",")
-					If Value = "INT" Or Value = "STR" Then
+					If IsType(Value) Then
 						t = Value
 						Next1
 					End If
@@ -1141,11 +1157,7 @@ Sub Assignement(n)
 			MatchString("=")
 			If GetDataType(n) = "INT" Then
 				BoolExpression
-				If IsParam(n) Then
-					StoreParam(ParamNumber(n))
-				Else
-					Store(n)
-				End If
+				Store(n)
 			ElseIf GetDataType(n) = "STR" Then
 				StringExpression
 				If IsParam(n) Then
@@ -1156,7 +1168,7 @@ Sub Assignement(n)
 					Else
 						SetAdditionalInfo n,True
 					End If
-					StoreParam(ParamNumber(n))
+					Store(n)
 				Else
 					If GetAdditionalInfo(n) = True Then
 						Push
@@ -1407,7 +1419,7 @@ Sub Factor
 			LoadArrayCell n
 		ElseIf IsParam(n) Then
 			If GetDataType(n) = "STR" Then Abort("Type mismatch, variable " & n & " is not of type INT")
-			LoadParam(ParamNumber(n))
+			LoadVar(n)
 		ElseIf InTable(n) Then
 			If GetDataType(n) = "STR" Then Abort("Type mismatch, variable " & n & " is not of type INT")
 			LoadVar(n)
@@ -1663,7 +1675,7 @@ End Sub
 
 Sub BoolExpression
 	BoolTerm
-	Do While IsOrop(Token)
+	Do While IsOrop(Value)
 		Push
 		Select Case Value
 			Case "|":BoolOr
@@ -2056,7 +2068,7 @@ Sub DoSub
 	End If
 	If Token = ":" Then
 		MatchString(":")
-		If Value = "INT" Or Value = "STR" Then
+		If IsType(Value) Then
 			Next1
 		Else
 			Expected("Type Name")
@@ -2095,7 +2107,7 @@ End Sub
 
 Sub FormalParam
 	Dim n,t:t = "INT"
-	If Value = "INT" Or Value = "STR" Then
+	If IsType(Value) Then
 		t = Value
 		Next1
 	End If
@@ -2128,7 +2140,7 @@ End Function
 
 Sub LocDecl
 	Dim t,data,n:t = "INT"
-	If Value = "STR" Or Value = "INT" Then
+	If IsType(Value) Then
 		t = Value
 		Next1
 	End If
@@ -2189,16 +2201,20 @@ Sub AddParam(n,IdentType,DataType,AdditionalInfo)
 End Sub
 
 Sub DoReturn(Ret)
+	Dim t
 	If Ret = "" Then Abort("RETURN Outside Of A Procedure")
 	MatchString("RETURN")
 	MatchString("(")
 	If Token = ")" Then
 		Clear
 	Else
-		If GetDataType(Right(Ret,Len(Ret) - 3)) = "STR" Then
+		t = GetDataType(Right(Ret,Len(Ret) - 3))
+		If t = "STR" Then
 			StringExpression
-		Else
+		ElseIf t = "INT" Then
 			BoolExpression
+		Else
+			Abort("The only returnable types are INT and STR")
 		End If
 	End If
 	MatchString(")")
@@ -2221,7 +2237,7 @@ Sub DoMethod
 	MatchString(")")
 	If Token = ":" Then
 		MatchString(":")
-		If Value = "INT" Or Value = "STR" Then
+		If IsType(Value) Then
 			Next1
 		Else
 			Expected("Type Name")
@@ -2350,7 +2366,11 @@ Sub LoadLocalPointer(n)
 End Sub
 
 Sub LoadVar(n)
-	EmitLn("MOV eax, DWORD [V_" & n & "]")
+	If IsParam(n) Then
+		EmitLn("MOV eax, DWORD [ebp + " & ((NumParams + 2) * 4) - (ParamNumber(n) * 4) + AdjustOffset & "]")
+	Else
+		EmitLn("MOV eax, DWORD [V_" & n & "]")
+	End If
 End Sub
 
 Sub LoadConstant(n)
@@ -2407,7 +2427,11 @@ Sub PopModulo
 End Sub
 
 Sub Store(n)
-	EmitLn("MOV [V_" & n & "], eax")
+	If IsParam(n) Then
+		EmitLn("MOV DWORD [ebp + " & ((NumParams + 2) * 4) - (ParamNumber(n) * 4) + AdjustOffset & "], eax")
+	Else
+		EmitLn("MOV DWORD [V_" & n & "], eax")
+	End If
 End Sub
 
 Sub StoreArray(n)
@@ -2609,16 +2633,6 @@ End Sub
 
 Sub Return(k)
 	EmitLn("RET " & k * 4)
-End Sub
-
-Sub LoadParam(n)
-	Dim Offset:Offset = ((NumParams + 2) * 4) - (n * 4) + AdjustOffset
-	EmitLn("MOV eax, DWORD [ebp + " & Offset & "]")
-End Sub
-
-Sub StoreParam(n)
-	Dim Offset:Offset = ((NumParams + 2) * 4) - (n * 4) + AdjustOffset
-	EmitLn("MOV DWORD [ebp + " & Offset & "], eax")
 End Sub
 
 Sub CleanStack(n)
