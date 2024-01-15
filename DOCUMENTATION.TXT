@@ -260,6 +260,10 @@ SUB FOO(argument_array[])
 	...
 ENDSUB
 
+Arrays are always passed by value to procedures. Passing them by reference
+was overly complex to implement, and it slowed the code a lot compared to
+the limited extension of possibilities brought by the value passing
+
 \-------------------------------------------------------------------------\
 \Control Structures\
 There are 5 control structures in DBasic, which should cover all your needs.
