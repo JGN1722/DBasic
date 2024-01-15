@@ -886,9 +886,7 @@ Sub WriteMetadata
 				dict.Add "OriginalFilename", Value
 				Next1
 			ElseIf Token = "." Then
-				MatchString(".")
-				MatchString(".")
-				MatchString(".")
+				DoPass
 			Else
 				Abort("Unrecognized attribute: " & Value)
 			End If
@@ -920,9 +918,7 @@ Sub Enumerations
 		MatchString("ENUMERATION")
 		Do While Value <> "ENDENUMERATION"
 			If Value = "." Then
-				MatchString(".")
-				MatchString(".")
-				MatchString(".")
+				DoPass
 			Else
 				Constants.Add Value, Array("INT",i)
 				i = i + 1
