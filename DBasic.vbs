@@ -1052,6 +1052,9 @@ Sub TopDecls
 				MatchString("CONST")
 				If IsType(Value) Then
 					t = Value
+					If t <> "INT" And t <> "STR" Then
+						Abort("Incorrect constant type: " & t)
+					End If
 					Next1
 				End If
 				n = Value
@@ -1236,10 +1239,10 @@ Sub AssignMul(n)
 	If Not GetDataType(n) = "INT" Then Abort("Cannot assign and multiply to " & n & " (invalid type)")
 	Expression
 	If IsParam(n) Then
-		EmitLn("IMUL eax, DWORD [ebp + " & ((NumParams + 2) * 4) - (ParamNumber(n) * 4) + AdjustOffset & "]")
+		EmitLn("IMUL DWORD [ebp + " & ((NumParams + 2) * 4) - (ParamNumber(n) * 4) + AdjustOffset & "]")
 		EmitLn("MOV DWORD [ebp + " & ((NumParams + 2) * 4) - (ParamNumber(n) * 4) + AdjustOffset & "], eax")
 	Else
-		EmitLn("IMUL eax, [V_" & n & "]")
+		EmitLn("IMUL [V_" & n & "]")
 		EmitLn("MOV [V_" & n & "], eax")
 	End If
 End Sub
@@ -1357,7 +1360,10 @@ Sub Param
 	Else
 		If Value = "ARRAY" Then
 			MatchString("ARRAY")
-			ArrayExpression
+			LoadVar(Value)
+			Next1
+			MatchString("[")
+			MatchString("]")
 		ElseIf Token = Chr(34) Or Token = "'" Or GetDataType(Value) = "STR" Then
 			StringExpression
 		Else
@@ -1391,11 +1397,7 @@ Sub Factor
 	ElseIf Token = "@" Then
 		MatchString("@")
 		If GetIdentType(Value) <> "" Then
-			If IsParam(Value) Then
-				LoadLocalPointer(Value)
-			Else
-				LoadPointer(Value)
-			End If
+			LoadPointer(Value)
 			Next1
 		Else
 			Undefined(Value)
@@ -1874,23 +1876,6 @@ End Sub
 
 '---------------------------------------------------------------------
 '---------------------------------------------------------------------
-'Array Expressions
-'---------------------------------------------------------------------
-'---------------------------------------------------------------------
-Sub ArrayExpression
-	If GetIdentType(Value) <> "array" Then Abort("Array expected")
-	If GetDataType(Value) = "STR" Then
-		CopyStringArray(Value)
-	Else
-		CopyArray(Value)
-	End If
-	Next1
-	MatchString("[")
-	MatchString("]")
-End Sub
-
-'---------------------------------------------------------------------
-'---------------------------------------------------------------------
 'Control Structures
 '---------------------------------------------------------------------
 '---------------------------------------------------------------------
@@ -1953,6 +1938,8 @@ Sub DoSelect(L,Ret)
 		ElseIf t = "INT" Then
 			Expression
 			CompareTopOfStack
+		Else
+			Abort("Incorrect type: " & t)
 		End If
 		L2 = NewLabel
 		BranchIfFalse(L2)
@@ -2357,12 +2344,12 @@ Sub LoadConst(n)
 End Sub
 
 Sub LoadPointer(n)
-	EmitLn("MOV eax, V_" & UCase(n))
-End Sub
-
-Sub LoadLocalPointer(n)
-	EmitLn("MOV eax, ebp")
-	EmitLn("ADD eax, " & ((NumParams + 2) * 4) - (ParamNumber(n) * 4) + AdjustOffset)
+	If IsParam(n) Then
+		EmitLn("MOV eax, ebp")
+		EmitLn("ADD eax, " & ((NumParams + 2) * 4) - (ParamNumber(n) * 4) + AdjustOffset)
+	Else
+		EmitLn("MOV eax, V_" & UCase(n))
+	End If
 End Sub
 
 Sub LoadVar(n)
@@ -2665,7 +2652,7 @@ Sub LocFree(k,L)
 	arr = FormalParamST.Keys
 	If Not UBound(arr) = -1 Then
 		Do
-			If GetDataType(arr(i)) = "STR" Then
+			If GetDataType(arr(i)) = "STR" And GetAdditionalInfo(arr(i)) <> -1 Then
 				If GetIdentType(arr(i)) = "array" Then
 					FreeStringArrayLoc(arr(i))
 				End If
@@ -2718,64 +2705,6 @@ Sub AllocateLocalArray(o,i)
 	EmitLn("invoke HeapAlloc,[hHeap],HEAP_ZERO_MEMORY," & i * 4 + 4)
 	EmitLn("MOV DWORD [ebp + " & ((NumParams + 2) * 4) - (o * 4) + AdjustOffset & "], eax")
 	EmitLn("MOV DWORD [eax], " & i)
-End Sub
-
-Sub CopyArray(n)
-	If IsParam(n) Then
-		o = ((NumParams + 2) * 4) - (ParamNumber(n) * 4) + AdjustOffset
-		EmitLn("MOV esi, DWORD [ebp + " & o & "]")
-	Else
-		EmitLn("MOV esi, [V_" & n & "]")
-	End If
-	EmitLn("MOV eax, DWORD [esi]")
-	EmitLn("INC eax")
-	EmitLn("SHL eax, 2")
-	EmitLn("MOV ebx, eax")
-	EmitLn("invoke HeapAlloc,[hHeap],HEAP_ZERO_MEMORY,eax")
-	EmitLn("MOV edi, eax")
-	EmitLn("MOV ecx, ebx")
-	EmitLn("REP MOVSB")
-End Sub
-
-Sub CopyStringArray(n)
-	Dim o
-	If IsParam(n) Then
-		o = ((NumParams + 2) * 4) - (ParamNumber(n) * 4) + AdjustOffset
-		EmitLn("MOV esi, DWORD [ebp + " & o & "]")
-	Else
-		EmitLn("MOV esi, [V_" & n & "]")
-	End If
-	EmitLn("MOV eax, DWORD [esi]")
-	EmitLn("INC eax")
-	EmitLn("SHL eax, 2")
-	EmitLn("invoke HeapAlloc,[hHeap],HEAP_ZERO_MEMORY,eax")
-	EmitLn("MOV edi, eax")
-	EmitLn("MOV ecx, DWORD [esi]")
-	EmitLn("MOV DWORD [eax], ecx")
-	EmitLn("PUSH eax")
-	PostLabel("@@")
-	EmitLn("PUSH ecx")
-	EmitLn("ADD edi, 4")
-	EmitLn("ADD esi, 4")
-	
-	EmitLn("MOV edx, DWORD [esi]")
-	EmitLn("MOV edx, DWORD [edx]")
-	EmitLn("ADD edx, 5")
-	EmitLn("invoke HeapAlloc,[hHeap],HEAP_ZERO_MEMORY,edx")
-	EmitLn("PUSH edi")
-	EmitLn("PUSH esi")
-	EmitLn("MOV edi, eax")
-	EmitLn("MOV esi, DWORD [esi]")
-	EmitLn("MOV ecx, DWORD [esi]")
-	EmitLn("MOV DWORD [edi], ecx")
-	CopyString
-	EmitLn("POP esi")
-	EmitLn("POP edi")
-	EmitLn("MOV DWORD [edi], eax")
-	
-	EmitLn("POP ecx")
-	EmitLn("LOOP @b")
-	EmitLn("POP eax")
 End Sub
 
 Sub LoadStringFromArray(n)
