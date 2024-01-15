@@ -260,7 +260,7 @@ SUB FOO(argument_array[])
 	...
 ENDSUB
 
-Arrays are always passed by value to procedures. Passing them by reference
+Arrays are always passed by reference to procedures. Passing them by value
 was overly complex to implement, and it slowed the code a lot compared to
 the limited extension of possibilities brought by the value passing
 
