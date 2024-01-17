@@ -7,7 +7,7 @@ Global
   Dim test_class test1
 EndGlobal
 
-Class test1
+Class test_class
   Property a
   Property STR b
   Property INT c
