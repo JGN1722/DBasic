@@ -393,8 +393,46 @@ to allow programmers to write window callback procedures, which must follow
 the stdcall convention.
 
 \-------------------------------------------------------------------------\
+\Classes\
+DBasic supports classes. Classes must be declared after ENUMERATIONs, and
+are redacted like this:
+
+Class class1
+	Property prop1
+	Property INT prop2
+	Property STR prop3
+	
+	Method Method1(STR msg)
+		MsgBox(msg, self.prop3, msgbox_information)
+	EndMethod
+	
+	Method Method2()
+		...
+	EndMethod
+EndClass
+
+You can then create instances:
+
+Global
+	Dim CLASS1 var1, ...
+	...
+EndGlobal
+
+Or
+
+Sub foo()
+	Dim CLASS1 var1, ...
+	...
+EndSub
+
+The operator "." is used to access properties and methods:
+
+var1.prop3 = "hey!"
+var1.Method1("Hey there! :)")
+
+\-------------------------------------------------------------------------\
 \Inline Assembly\
-DBasic includes inline assembly to allow for optimization, and for easy
+DBasic includes inline assembly to allow for optimization and for easy
 access to non-implemented features.
 
 The '$' symbol indicates that the rest of the line is in assembly. The code

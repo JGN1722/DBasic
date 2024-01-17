@@ -87,6 +87,13 @@ Sub Initialize
 		Abort("No File Name Provided")
 	End If
 	FileName = WScript.Arguments.Item(0)
+	If FileName = "/?" Or FileName = "-help" Or FileName = "-h" Then
+		DisplayHelp
+		WScript.Quit
+	End If
+	If Not Fso.FileExists(FileName) Then
+		Abort("File not found")
+	End If
 	If Not Fso.GetFile(FileName).Size = 0 then
 		Text = Fso.OpenTextFile(FileName).ReadAll
 	Else
@@ -156,7 +163,16 @@ Function execStdOut(cmd)
 		WScript.Sleep 100
 	Loop
 	execStdOut = aRet.StdErr.ReadAll()
-End Function 
+End Function
+
+Sub DisplayHelp
+	WScript.Echo "DBasic compiler - Written by JGN1722"
+	WScript.Echo "Usage:"
+	WScript.Echo "DBasic.vbs [option]|[filename.dbs]"
+	WScript.Echo ""
+	WScript.Echo "Options:"
+	WScript.Echo "/? | -help | -h: Display this message"
+End Sub
 
 '---------------------------------------------------------------------
 'Cradle Subs
@@ -390,7 +406,7 @@ End Function
 
 Function GetIdentType(n)
 	If IsParam(n) Then
-		GetIdentType = FormalParamST.Item(n)(2)
+		GetIdentType = FormalParamST.Item(n)(1)
 	ElseIf InTable(n) Then
 		GetIdentType = ST.Item(n)(0)
 	ElseIf Constants.Exists(n) Then
@@ -407,7 +423,7 @@ Function GetDataType(n)
 		member_name = Mid(n,InStr(n,".") + 1)
 		If ClassST.Exists(class_name) Then GetDataType = ClassST.Item(class_name).Item(member_name)(1)
 	ElseIf IsParam(n) Then
-		GetDataType = FormalParamST.Item(n)(1)
+		GetDataType = FormalParamST.Item(n)(2)
 	ElseIf InTable(n) Then
 		GetDataType = ST.Item(n)(1)
 	ElseIf Constants.Exists(n) Then
@@ -2340,7 +2356,7 @@ Function IsParam(n)
 	IsParam = FormalParamST.Exists(n)
 End Function
 
-Sub AddParam(n,IdentType,DataType,AdditionalInfo)
+Sub AddParam(n,DataType,IdentType,AdditionalInfo)
 	CheckIsKeyword(n)
 	If InTable(n) Then Abort(n & " is already declared in the global scope")
 	If IsParam(n) Then Duplicate(n)
