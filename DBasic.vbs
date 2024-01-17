@@ -19,6 +19,7 @@ Dim DebugMode
 Dim PassNumber
 
 Dim InMethod:InMethod = False
+Dim current_class:current_class = ""
 
 '---------------------------------------------------------------------
 'Definition Of Keywords And Token Types
@@ -130,9 +131,15 @@ Sub Assemble
 	Dim CommandLine,OutFileName,CurrentPath,StdErrResult
 	CurrentPath = Fso.GetParentFolderName(WScript.ScriptFullName)
 	If Mid(WScript.Arguments.Item(0),2,1) = ":" Then
-		CommandLine = CurrentPath & "\fasm\FAsm.exe " & CurrentPath & "\output.asm " & Left(WScript.Arguments.Item(0),InStr(WScript.Arguments.Item(0),".") - 1) & ".exe"
+		CommandLine =	CurrentPath & "\fasm\FAsm.exe " & CurrentPath &_
+				"\output.asm " & Left(WScript.Arguments.Item(0),_
+				InStr(WScript.Arguments.Item(0),".") - 1) & ".exe"
+
 	Else
-		CommandLine = CurrentPath & "\fasm\FAsm.exe " & CurrentPath & "\output.asm " & Shell.CurrentDirectory & "\" & Left(WScript.Arguments.Item(0),InStr(WScript.Arguments.Item(0),".") - 1) & ".exe"
+		CommandLine =	CurrentPath & "\fasm\FAsm.exe " & CurrentPath &_
+				"\output.asm " & Shell.CurrentDirectory & "\" &_
+				Left(WScript.Arguments.Item(0),InStr(WScript.Arguments.Item(0),_
+				".") - 1) & ".exe"
 	End If
 	StdErrResult = ExecStdOut(CommandLine)
 	If StdErrResult <> "" Then
@@ -163,7 +170,7 @@ Sub Warning(s)
 End Sub
 
 Sub Abort(s)
-	WScript.Echo "(Ln: " & ErrLn & ")Error: " & s & "."
+	WScript.Echo "(Ln: " & ErrLn & ") Error: " & s & "."
 	WScript.Quit
 End Sub
 
@@ -393,10 +400,12 @@ End Function
 
 Function GetDataType(n)
 	Dim member_name,class_name
-	If InStr(n,".") <> 0 Then
+	If n = "SELF" Then
+		GetDataType = current_class
+	ElseIf InStr(n,".") <> 0 And n <> "" Then
 		class_name = Left(n,InStr(n,".") - 1)
 		member_name = Mid(n,InStr(n,".") + 1)
-		GetDataType = ClassST.Item(class_name).Item(member_name)(1)
+		If ClassST.Exists(class_name) Then GetDataType = ClassST.Item(class_name).Item(member_name)(1)
 	ElseIf IsParam(n) Then
 		GetDataType = FormalParamST.Item(n)(1)
 	ElseIf InTable(n) Then
@@ -965,6 +974,7 @@ Sub CompileMethods
 	Do While Value = "CLASS"
 		CompileClassMethods
 	Loop
+	current_class = ""
 	InMethod = False
 End Sub
 
@@ -972,7 +982,7 @@ Sub CompileClassMethods
 	Dim class_name,method_name
 	Dim arg_count, t:t = "INT"
 	MatchString("CLASS")
-	class_name = Value
+	current_class = Value
 	Next1
 	
 	Do While Value <> "ENDCLASS"
@@ -983,7 +993,7 @@ Sub CompileClassMethods
 			End If
 			Next1
 		Else
-			DoMethod(class_name)
+			DoMethod
 		End If
 	Loop
 	
@@ -1374,7 +1384,9 @@ End Sub
 Sub DoCall
 	Dim n,method_name
 	MatchString("CALL")
-	If Not InTable(Value) And Not IsParam(Value) Then Undefined(Value)
+	If Not InTable(Value) And Not IsParam(Value) Then
+		If Value <> "SELF" Or Not InMethod Then Undefined(Value)
+	End If
 	If GetIdentType(Value) = "procedure" Then
 		n = Value
 		Next1
@@ -1418,7 +1430,11 @@ Sub CallMethod(n)
 		GetDataType(n) & "." & method_name & "()" &_
 		VbCrLf & "given: " & nbytes / 4 &_
 		VbCrLf & "expected: " & GetAdditionalInfo(GetDataType(n) & "." & method_name))
-	LoadPointer(n)
+	If n = "SELF" And InMethod Then
+		EmitLn("MOV eax, DWORD [ebp + 8]")
+	Else
+		LoadPointer(n)
+	End If
 	Push
 	JmpToMethod(GetDataType(n) & "_V_" & method_name)
 	CleanStack(nbytes + 4)
@@ -1453,7 +1469,7 @@ Sub Param
 			MatchString("]")
 		ElseIf Token = Chr(34) Or Token = "'" Or GetDataType(Value) = "STR" Then
 			StringExpression
-		ElseIf GetDataType(Value) <> "INT" Then
+		ElseIf Token = "x" And GetDataType(Value) <> "INT" Then
 			t = GetDataType(GetDataType(Value) & "." & PredictValue(2))
 			If t = "INT" Then
 				BoolExpression
@@ -1509,16 +1525,17 @@ Sub Factor
 			If GetDataType(n) <> "INT" Then Abort("Type mismatch, procedure " & n & " is not of type INT")
 			CallProc(n)
 		ElseIf Token = "." Then
-			MatchString(".")
-			LoadPointer(n)
-			If Not IsProperty(GetDataType(n),Value) Then Abort("Missing property: " & n & "." & Value)
-			If GetDataType(GetDataType(n) & "." & Value) <> "INT" Then Abort("Type mismatch, property " & n & "." & Value & " is not of type INT")
-			o = GetPropertyPosition(GetDataType(n),Value)
-			If o <> 0 Then
-				EmitLn("ADD eax, " & o)
+			If IsProperty(GetDataType(n),PredictValue(1)) Then
+				MatchString(".")
+				If GetDataType(GetDataType(n) & "." & Value) <> "INT" Then Abort("Type mismatch, property " & n & "." & Value & " is not of type INT")
+				LoadProperty n,Value
+				Next1
+			ElseIf IsMethod(GetDataType(n),PredictValue(1)) Then
+				If GetDataType(GetDataType(n) & "." & PredictValue(1)) <> "INT" Then Abort("Type mismatch, method " & GetDataType(n) & "." & PredictValue(1) & " is not of type INT")
+				CallMethod(n)
+			Else
+				Abort("Missing property or method: " & GetDataType(n) & "." & Value)
 			End If
-			EmitLn("MOV eax, DWORD [eax]")
-			Next1
 		ElseIf GetIdentType(n) = "array" Then
 			If GetDataType(n) <> "INT" Then Abort("Type mismatch, array " & n & " is not of type INT")
 			MatchString("[")
@@ -1853,12 +1870,22 @@ Sub FirstStringTerm
 			If GetDataType(n) <> "STR" Then Abort(n & " does not return a string")
 			CallProc(n)
 		ElseIf Value = "." Then
-			MatchString(".")
-			LoadPointer(n)
-			If Not IsProperty(GetDataType(n),Value) Then Abort("Missing property: " & n & "." & Value)
-			If GetDataType(GetDataType(n) & "." & Value) <> "STR" Then Abort("Type mismatch, property " & n & "." & Value & " is not of type STR")
-			CopyPropertyString n,Value
-			Next1
+			If IsProperty(GetDataType(n),PredictValue(1)) Then
+				MatchString(".")
+				If n = "SELF" And InMethod Then
+					EmitLn("MOV eax, DWORD [ebp + 8]")
+				Else
+					LoadPointer(n)
+				End If
+				If GetDataType(GetDataType(n) & "." & Value) <> "STR" Then Abort("Type mismatch, property " & n & "." & Value & " is not of type STR")
+				CopyPropertyString n,Value
+				Next1
+			ElseIf IsMethod(GetDataType(n),PredictValue(1)) Then
+				If GetDataType(GetDataType(n) & "." & PredictValue(1)) <> "STR" Then Abort("Type mismatch, method " & GetDataType(n) & "." & PredictValue(1) & " is not of type STR")
+				CallMethod(n)
+			Else
+				Abort("Missing property or method: " & GetDataType(n) & "." & Value)
+			End If
 		ElseIf GetIdentType(n) = "array" Then
 			If GetDataType(n) <> "STR" Then Abort(n & " is not a string array")
 			MatchString("[")
@@ -1932,17 +1959,28 @@ Sub AppendStringTerm
 			CallProc(n)
 			NeedToFree = True
 		ElseIf Value = "." Then
-			MatchString(".")
-			LoadPointer(n)
-			If Not IsProperty(GetDataType(n),Value) Then Abort("Missing property: " & n & "." & Value)
-			If GetDataType(GetDataType(n) & "." & Value) <> "STR" Then Abort("Type mismatch, property " & n & "." & Value & " is not of type STR")
-			o = GetPropertyPosition(GetDataType(n),Value)
-			If o <> 0 Then
-				EmitLn("MOV eax, DWORD [eax + " & o & "]")
+			If IsProperty(GetDataType(n),PredictValue(1)) Then
+				MatchString(".")
+				If GetDataType(GetDataType(n) & "." & Value) <> "STR" Then Abort("Type mismatch, property " & n & "." & Value & " is not of type STR")
+				If n = "SELF" And InMethod Then
+					EmitLn("MOV eax, DWORD [ebp + 8]")
+				Else
+					LoadPointer(n)
+				End If
+				o = GetPropertyPosition(GetDataType(n),Value)
+				If o <> 0 Then
+					EmitLn("MOV eax, DWORD [eax + " & o & "]")
+				Else
+					EmitLn("MOV eax, DWORD [eax]")
+				End If
+				Next1
+			ElseIf IsMethod(GetDataType(n),PredictValue(1)) Then
+				If GetDataType(GetDataType(n) & "." & PredictValue(1)) <> "STR" Then Abort("Type mismatch, method " & GetDataType(n) & "." & PredictValue(1) & " is not of type STR")
+				CallMethod(n)
+				NeedToFree = True
 			Else
-				EmitLn("MOV eax, DWORD [eax]")
+				Abort("Missing property or method: " & GetDataType(n) & "." & Value)
 			End If
-			Next1
 		ElseIf GetIdentType(n) = "array" Then
 			If Not GetDataType(n) = "STR" Then Abort(n & " is not a string array")
 			MatchString("[")
@@ -2322,7 +2360,11 @@ Sub DoReturn(Ret)
 	If Token = ")" Then
 		Clear
 	Else
-		t = GetDataType(Right(Ret,Len(Ret) - 3))
+		If InMethod Then
+			t = GetDataType(current_class & "." & Right(Ret,Len(Ret) - 3))
+		Else
+			t = GetDataType(Right(Ret,Len(Ret) - 3))
+		End If
 		If t = "STR" Then
 			StringExpression
 		ElseIf t = "INT" Then
@@ -2340,7 +2382,7 @@ End Sub
 'Methods And Classes Handling
 '---------------------------------------------------------------------
 '---------------------------------------------------------------------
-Sub DoMethod(class_name)
+Sub DoMethod
 	Dim Name,k,L1
 	MatchString("METHOD")
 	Name = Value
@@ -2360,7 +2402,7 @@ Sub DoMethod(class_name)
 	If DebugMode = 1 Then
 		EmitLn("db '" & class_name & "_" & Name & "',0")
 	End If
-	PostLabel(class_name & "_V_" & Name)
+	PostLabel(current_class & "_V_" & Name)
 	k = LocDecls
 	LocAlloc(k)
 	ProcHeader
@@ -2384,18 +2426,22 @@ End Function
 
 Function IsMethod(class_name,n)
 	IsMethod = False
-	If ClassST.Item(class_name).Exists(n) Then
-		If ClassST.Item(class_name).Item(n)(0) = "method" Then
-			IsMethod = True
+	If ClassST.Exists(class_name) Then
+		If ClassST.Item(class_name).Exists(n) Then
+			If ClassST.Item(class_name).Item(n)(0) = "method" Then
+				IsMethod = True
+			End If
 		End If
 	End If
 End Function
 
 Function IsProperty(class_name,n)
 	IsProperty = False
-	If ClassST.Item(class_name).Exists(n) Then
-		If ClassST.Item(class_name).Item(n)(0) = "property" Then
-			IsProperty = True
+	If ClassST.Exists(class_name) Then
+		If ClassST.Item(class_name).Exists(n) Then
+			If ClassST.Item(class_name).Item(n)(0) = "property" Then
+				IsProperty = True
+			End If
 		End If
 	End If
 End Function
@@ -2460,6 +2506,20 @@ Sub LoadVar(n)
 	Else
 		EmitLn("MOV eax, DWORD [V_" & n & "]")
 	End If
+End Sub
+
+Sub LoadProperty(instance_name,property)
+	Dim o
+	If instance_name = "SELF" And InMethod Then
+		EmitLn("MOV eax, DWORD [ebp + 8]")
+	Else
+		LoadPointer(n)
+	End If
+	o = GetPropertyPosition(GetDataType(instance_name),property)
+	If o <> 0 Then
+		EmitLn("ADD eax, " & o)
+	End If
+	EmitLn("MOV eax, DWORD [eax]")
 End Sub
 
 Sub LoadConstant(n)
@@ -2535,7 +2595,9 @@ End Sub
 
 Sub StoreProperty(n,property_name)
 	Dim o
-	If IsParam(n) Then
+	If n = "SELF" And InMethod Then
+		EmitLn("MOV ebx, DWORD [ebp + 8]")
+	ElseIf IsParam(n) Then
 		o = ((NumParams + 2) * 4) - (ParamNumber(n) * 4) + AdjustOffset
 		EmitLn("MOV ebx, ebp")
 		EmitLn("ADD ebx, " & o)
@@ -2770,15 +2832,26 @@ Sub LocAlloc(k)
 End Sub
 
 Sub LocFree(k,L)
-	Dim i,arr
+	Dim i,ii,arr,a,instance_name,class_name
 	arr = FormalParamST.Keys
 	If Not UBound(arr) = -1 Then
 		Do
-			If GetDataType(arr(i)) = "STR" And GetAdditionalInfo(arr(i)) <> -1 Then
+			If GetDataType(arr(i)) = "STR" And GetAdditionalInfo(arr(i)) <> True Then
 				If GetIdentType(arr(i)) = "array" Then
 					FreeStringArrayLoc(arr(i))
 				End If
 				FreeHeapBufferLoc(ParamNumber(arr(i)))
+			ElseIf GetDataType(arr(i)) <> "INT" And GetDataType(arr(i)) <> "STR" Then
+				instance_name = arr(i)
+				class_name = GetDataType(instance_name)
+				a = ClassST.Item(class_name).Keys
+				If Not UBound(a) = -1 Then
+					Do
+						If GetDataType(class_name & "." & ClassST.Item(class_name).Item(a(ii))) = "STR" Then FreeHeapBufferProperty instance_name,a(ii)
+						ii = ii + 1
+					Loop While ii <= UBound(a)
+					ii = 0
+				End If
 			End If
 			i = i + 1
 		Loop While i <= UBound(arr)
@@ -2795,9 +2868,7 @@ Sub LocFree(k,L)
 End Sub
 
 Sub FreeStringArrayLoc(n)
-	Dim o
-	o = ParamNumber(n)
-	EmitLn("MOV ebx, DWORD [ebp + " & ((NumParams + 2) * 4) - (o * 4) + AdjustOffset & "]")
+	EmitLn("MOV ebx, DWORD [ebp + " & ((NumParams + 2) * 4) - (ParamNumber(n) * 4) + AdjustOffset & "]")
 	EmitLn("MOV ecx, DWORD [ebx]")
 	PostLabel("@@")
 	EmitLn("PUSH ecx")
@@ -2873,15 +2944,19 @@ Sub FreeHeapBufferArray(n)
 End Sub
 
 Sub FreeHeapBufferProperty(n,property)
-	Dim o
-	If IsParam(n) Then
+	Dim o,p
+	p = GetPropertyPosition(GetDataType(n),property)
+	If n = "SELF" And InMethod Then
+		EmitLn("MOV ebx, DWORD [ebp + 8]")
+		EmitLn("ADD ebx, " & p)
+	ElseIf IsParam(n) Then
 		o = ((NumParams + 2) * 4) - (ParamNumber(n) * 4) + AdjustOffset
 		EmitLn("MOV ebx, ebp")
-		EmitLn("ADD ebx, " & o)
+		EmitLn("ADD ebx, " & o + p)
 	Else
 		EmitLn("MOV ebx, V_" & n)
+		If p <> 0 Then EmitLn("ADD ebx, " & p)
 	End If
-	EmitLn("ADD ebx, " & GetPropertyPosition(GetDataType(n),property))
 	EmitLn("invoke HeapFree,[hHeap],HEAP_ZERO_MEMORY,[ebx]")
 End Sub
 
@@ -2930,7 +3005,9 @@ Sub CopyStringFromArray(n)
 End Sub
 
 Sub CopyPropertyString(instance_name,property)
-	If IsParam(instance_name) Then
+	If instance_name = "SELF" And InMethod Then
+		EmitLn("MOV esi, DWORD [ebp + 8]")
+	ElseIf IsParam(instance_name) Then
 		EmitLn("MOV esi, ebp")
 		EmitLn("ADD esi, " & ((NumParams + 2) * 4) - (ParamNumber(instance_name) * 4) + AdjustOffset)
 	Else
