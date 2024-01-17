@@ -1,0 +1,25 @@
+\
+	Description: Demonstration of the object-orientated side of DBasic
+	Compile with: IO.LIB
+\
+
+Global
+  Dim test_class test1
+EndGlobal
+
+Class test1
+  Property a
+  Property STR b
+  Property INT c
+
+  Property STR message
+
+  Method SayMessage(STR title)
+    MsgBox(self.message,title,msgbox_information)
+  EndMethod
+EndClass
+
+Main
+  test1.message = "Hello there!"
+  test1.SayMessage("greetings, mortal")
+EndMain
