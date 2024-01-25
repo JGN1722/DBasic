@@ -203,27 +203,11 @@ Sub Duplicate(n)
 End Sub
 
 Function IsAlpha(c)
-	If c = "" Then
-		IsAlpha = False
-		Exit Function
-	End If
-	If InStr("ABCDEFGHIJKLMNOPQRSTUVWXYZ_?",UCase(c)) Then
-		IsAlpha = True
-	Else
-		IsAlpha = False
-	End If
+	If c <> "" Then IsAlpha = Asc(c) >= 65 And Asc(c) <= 90 Or Asc(c) >= 97 And Asc(c) <= 122 Or ASc(c) = 63 Or Asc(c) = 95
 End Function
 
 Function IsDigit(c)
-	If c = "" Then
-		IsDigit = False
-		Exit Function
-	End If
-	If InStr("0123456789",c) Then
-		IsDigit = True
-	Else
-		IsDigit = False
-	End If
+	If c <> "" Then IsDigit = Asc(c) > 47 And Asc(c) < 58
 End Function
 
 Function IsAlNum(c)
@@ -231,43 +215,23 @@ Function IsAlNum(c)
 End Function
 
 Function IsAddop(c)
-	If c = "+" Or c = "-" Then
-		IsAddop = True
-	Else
-		IsAddop = False
-	End If
+	IsAddop = c = "+" Or c = "-"
 End Function
 
 Function IsMulop(c)
-	If c = "*" Or c = "/" Or c = "%" Then
-		IsMulop = True
-	Else
-		IsMulop = False
-	End If
+	IsMulop = c = "*" Or c = "/" Or c = "%"
 End Function
 
 Function IsOrop(c)
-	If c = "|" Or c = "~" Or c = "OR" Or c = "XOR" Then
-		IsOrop = True
-	Else
-		IsOrop = False
-	End If
+	IsOrop = c = "|" Or c = "~" Or c = "OR" Or c = "XOR"
 End Function
 
 Function IsRelop(c)
-	If c = "=" Or c = "<" Or c = ">" Or c = "!" Then
-		IsRelop = True
-	Else
-		IsRelop = False
-	End If
+	IsRelop = c = "=" Or c = "<" Or c = ">" Or c = "!"
 End Function
 
 Function IsWhite(c)
-	If c = " " Or c = Chr(9) Or c = Chr(13) Or c = Chr(10) Then
-		IsWhite = True
-	Else
-		IsWhite = False
-	End If
+	IsWhite = c = " " Or c = Chr(9) Or c = Chr(13) Or c = Chr(10)
 End Function
 
 Function IsKeyword(n)
@@ -441,6 +405,19 @@ Function GetAdditionalInfo(n)
 		GetAdditionalInfo = FormalParamST.Item(n)(3)
 	ElseIf InTable(n) Then
 		GetAdditionalInfo = ST.Item(n)(2)
+	End If
+End Function
+
+Function Get2ndAdditionalInfo(n)
+	Dim member_name,class_name
+	If InStr(n,".") <> 0 Then
+		class_name = Left(n,InStr(n,".") - 1)
+		member_name = Mid(n,InStr(n,".") + 1)
+		GetAdditionalInfo = ClassST.Item(class_name).Item(member_name)(3)
+	ElseIf IsParam(n) Then
+		GetAdditionalInfo = FormalParamST.Item(n)(4)
+	ElseIf InTable(n) Then
+		GetAdditionalInfo = ST.Item(n)(3)
 	End If
 End Function
 
@@ -707,7 +684,9 @@ Sub PreParseLib
 					Do While CharLib <> ")"
 						If CharLib = "," Then GetCharLib
 						GetNameLib
-						arr(2) = arr(2) + 1
+						If ValueLib <> "STR" And ValueLib <> "INT" Then
+							arr(2) = arr(2) + 1
+						End If
 						SkipWhitespaceLib
 					Loop
 					GetCharLib
