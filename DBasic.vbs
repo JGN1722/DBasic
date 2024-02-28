@@ -195,7 +195,14 @@ Sub Expected(s)
 End Sub
 
 Sub Undefined(n)
-	Abort("Undefined identifier ('" & n & "')")
+	If InMethod Then
+		If IsProperty(current_class,n) Or IsMethod(current_class,n) Then
+			Abort("Undefined identifier: " & n & VbCrLf &_
+			      "You might have misspelled: SELF." & n)
+		End If
+	Else
+		Abort("Undefined identifier ('" & n & "')")
+	End If
 End Sub
 
 Sub Duplicate(n)
@@ -1310,9 +1317,9 @@ Sub PropertyAssignement(n)
 		BoolExpression
 	ElseIf GetDataType(class_name & "." & property_name) = "STR" Then
 		StringExpression
-		XchgTopMain
+		Push
 		FreeHeapBufferProperty n, property_name
-		XchgTopMain
+		Pop
 	Else
 		Abort("Unexpected data type: '" & GetDataType(class_name & "." & property_name) & "'")
 	End If
@@ -1470,6 +1477,8 @@ Sub Param
 				BoolExpression
 			ElseIf t = "STR" Then
 				StringExpression
+			ElseIf Not InTable(Value) Then
+				Undefined(Value)
 			Else
 				Abort("Unexpected type: " & t)
 			End If
@@ -1903,7 +1912,7 @@ Sub FirstStringTerm
 End Sub
 
 Sub AppendStringTerm
-	dim n,s,L,length,NeedToFree
+	dim n,o,s,L,length,NeedToFree
 	NeedToFree = False
 	If Token = Chr(34) Then
 		Do While Not Look = Chr(34)
