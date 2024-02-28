@@ -1242,7 +1242,11 @@ Sub Assignement(n)
 					AssignSub(n)
 			End Select
 		Case "*"
+			MatchString("*")
 			AssignMul(n)
+		Case "&"
+			MatchString("&")
+			AssignConcat(n)
 	End Select
 End Sub
 
@@ -1271,7 +1275,6 @@ Sub AssignSub(n)
 End Sub
 
 Sub AssignMul(n)
-	MatchString("*")
 	MatchString("=")
 	CheckTable(n)
 	If Not GetDataType(n) = "INT" Then Abort("Cannot assign and multiply to " & n & " (invalid type)")
@@ -1283,6 +1286,21 @@ Sub AssignMul(n)
 		EmitLn("IMUL [V_" & n & "]")
 		EmitLn("MOV [V_" & n & "], eax")
 	End If
+End Sub
+
+Sub AssignConcat(n)
+	MatchString("=")
+	CheckTable(n)
+	If Not GetDataType(n) = "STR" Then Abort("Cannot assign and concatenate to " & n & " (invalid type)")
+	LoadVar(n)
+	Push
+	AppendStringTerm
+	Do While Token = "&"
+		MatchString("&")
+		Push
+		AppendStringTerm
+	Loop
+	Store(n)
 End Sub
 
 Sub ArrayAssignement(n)

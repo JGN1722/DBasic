@@ -237,7 +237,10 @@ them:
 "that is the first line of the string
 and this is the second"
 
-You can compare them using '=', and concatenate them using '&'
+You can compare them using '=', and concatenate them using '&'.
+
+You can also use the '&=' operator to concatenate a string to another with
+better performances.
 
 \-------------------------------------------------------------------------\
 \Arrays\
