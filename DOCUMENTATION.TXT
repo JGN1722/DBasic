@@ -216,6 +216,10 @@ operators are OR (|), XOR (~), AND (&), NOT (!), <, <=, >, >=, and = for
 equalities. Just keep in mind that you can not mix types in boolean
 relations, so don't write things like 'IF 2 = "2"', it won't even compile.
 
+The bit-shift operations are also available, and the operators for these
+are << and >>. For the bitwise logical operations, you can simply use the
+designated boolean operators.
+
 Windows Api constants are also available for direct use, by prepending a #:
 
 Var1 = #WM_COMMAND
