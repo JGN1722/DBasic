@@ -1213,17 +1213,12 @@ Sub Assignement(n)
 					Else
 						SetAdditionalInfo n,True
 					End If
-					Store(n)
 				Else
-					If GetAdditionalInfo(n) = True Then
-						Push
-						FreeHeapBuffer(n)
-						Pop
-					Else
-						SetAdditionalInfo n,True
-					End If
-					Store(n)
+					Push
+					FreeHeapBuffer(n)
+					Pop
 				End If
+				Store(n)
 			Else
 				Abort("Unexpected data type: '" & GetDataType(n) & "'")
 			End If
