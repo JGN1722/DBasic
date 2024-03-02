@@ -229,6 +229,10 @@ Function IsMulop(c)
 	IsMulop = c = "*" Or c = "/" Or c = "%"
 End Function
 
+Function IsBitWiseOp(c)
+	IsBitWiseOp = c = "<" Or c = ">"
+End Function
+
 Function IsOrop(c)
 	IsOrop = c = "|" Or c = "~" Or c = "OR" Or c = "XOR"
 End Function
@@ -1522,7 +1526,7 @@ End Sub
 'Math Expressions
 '---------------------------------------------------------------------
 '---------------------------------------------------------------------
-Sub Factor
+Sub BitWiseFactor
 	Dim n,o
 	If Token = "(" Then
 		Next1
@@ -1580,6 +1584,31 @@ Sub Factor
 	Else
 		Expected("Math Factor")
 	End If
+End Sub
+
+Sub ShiftLeft
+	MatchString("<")
+	MatchString("<")
+	BitWiseFactor
+	PopShiftLeft
+End Sub
+
+Sub ShiftRight
+	MatchString(">")
+	MatchString(">")
+	BitWiseFactor
+	PopShiftRight
+End Sub
+
+Sub Factor
+	BitWiseFactor
+	Do While IsBitWiseOp(Token)
+		Push
+		Select Case Token
+			Case "<":ShiftLeft
+			Case ">":ShiftRight
+		End Select
+	Loop
 End Sub
 
 Sub NegFactor
@@ -2595,6 +2624,18 @@ Sub PopModulo
 	EmitLn("XOR edx, edx")
 	EmitLn("IDIV ebx")
 	EmitLn("MOV eax, edx")
+End Sub
+
+Sub PopShiftLeft
+	EmitLn("SHL DWORD [esp], eax")
+	EmitLn("MOV eax, DWORD [esp]")
+	EmitLn("ADD esp, 4")
+End Sub
+
+Sub PopShiftRight
+	EmitLn("SHR DWORD [esp], eax")
+	EmitLn("MOV eax, DWORD [esp]")
+	EmitLn("ADD esp, 4")
 End Sub
 
 Sub Store(n)
