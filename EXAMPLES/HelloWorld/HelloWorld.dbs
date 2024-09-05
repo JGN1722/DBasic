@@ -3,5 +3,5 @@
 	Compile with: IO.LIB
 \
  Main
-    MsgBox("Hello, World","DBasic",msgbox_information
+    MsgBox("Hello, World","DBasic",msgbox_information)
 EndMain
